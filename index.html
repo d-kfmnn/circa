@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Circuit Verification Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-head">
+          <p class="eyebrow">Interactive Tutorial</p>
+          <h1>Polynomial Reasoning on Small Multiplier AIGs</h1>
+        </div>
+        <p class="hero-copy">
+          Hover a node to inspect its circuit polynomial, compare multiple toy multipliers,
+          and step through the preprocessing pipeline before specification rewriting.
+        </p>
+      </header>
+
+      <div class="example-picker-row">
+        <p class="section-label">Circuit</p>
+        <div class="control-group graph-picker" id="examplePicker" aria-label="Choose circuit example"></div>
+      </div>
+
+      <main class="workspace">
+        <section class="panel panel-left">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Polynomial set</p>
+              <h2 id="polynomialTitle">Current constraints</h2>
+            </div>
+            <span class="chip" id="polynomialCount"></span>
+          </div>
+          <div id="polynomialList" class="poly-list compact" aria-live="polite"></div>
+        </section>
+
+        <section class="panel panel-right">
+          <div class="panel-header compact">
+            <div>
+              <p class="section-label">AIG view</p>
+              <h2 id="exampleTitle"></h2>
+            </div>
+            <p id="exampleDescription" class="muted-copy"></p>
+          </div>
+
+          <div id="preprocessingView">
+            <div class="timeline-card progress-card">
+              <div class="control-group phase-tabs" id="phaseTabsPreprocessing" role="tablist" aria-label="Choose pipeline phase"></div>
+              <p id="stageSummary" class="progress-summary"></p>
+              <ol id="stageList" class="stage-list"></ol>
+            </div>
+
+            <div class="graph-and-inspector">
+              <div class="graph-column">
+                <div class="graph-toolbar">
+                  <div class="toolbar-group">
+                    <button id="zoomOut" class="ghost-button toolbar-button" type="button">-</button>
+                    <span id="zoomLabel" class="chip toolbar-chip">100%</span>
+                    <button id="zoomIn" class="ghost-button toolbar-button" type="button">+</button>
+                    <button id="zoomReset" class="ghost-button toolbar-button" type="button">Reset</button>
+                  </div>
+                </div>
+                <div class="graph-card">
+                  <svg id="graph" viewBox="0 0 760 430" role="img" aria-labelledby="graphTitle graphDesc">
+                    <title id="graphTitle">And-Inverter Graph</title>
+                    <desc id="graphDesc">Interactive graph with hoverable nodes and polynomial annotations.</desc>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="specificationView" hidden>
+            <div class="timeline-card progress-card">
+              <div class="control-group phase-tabs" id="phaseTabsSpecification" role="tablist" aria-label="Choose pipeline phase"></div>
+              <div class="timeline-header">
+                <div>
+                  <p class="section-label">Specification rewrite</p>
+                  <h3>Reduce to the specification polynomial</h3>
+                </div>
+              </div>
+              <p class="section-label">Specification polynomial</p>
+              <p id="specPolynomial" class="spec-polynomial-expr"></p>
+            </div>
+
+            <div class="graph-column">
+              <div class="graph-toolbar">
+                <div class="toolbar-group">
+                  <button id="specSliceBack" class="ghost-button toolbar-button" type="button" title="Jump to previous slice">&laquo;</button>
+                  <button id="specStepBack" class="ghost-button toolbar-button" type="button">&larr;</button>
+                  <span id="specStepLabel" class="chip toolbar-chip">0 / 0</span>
+                  <button id="specStepForward" class="ghost-button accent-button toolbar-button" type="button">&rarr;</button>
+                  <button id="specSliceForward" class="ghost-button accent-button toolbar-button" type="button" title="Jump to next slice">&raquo;</button>
+                </div>
+                <div class="toolbar-group">
+                  <button id="specStepRunAll" class="ghost-button toolbar-button" type="button">Run all</button>
+                  <button id="specStepReset" class="ghost-button toolbar-button" type="button">Reset</button>
+                </div>
+              </div>
+              <div class="graph-card spec-log-card">
+                <div id="specStepLog" class="spec-step-log" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <aside id="nodePopover" class="node-popover inspector-card" aria-live="polite" aria-hidden="true">
+        <p class="section-label">Node inspector</p>
+        <h3 id="nodeName">Hover a node</h3>
+        <p id="nodeRole" class="inspector-role"></p>
+        <p id="nodePolynomial" class="inspector-poly">
+          The underlying circuit polynomial will appear here.
+        </p>
+        <dl class="inspector-meta">
+          <div>
+            <dt>Signal</dt>
+            <dd id="nodeSignal">-</dd>
+          </div>
+          <div>
+            <dt>Parents</dt>
+            <dd id="nodeParents">-</dd>
+          </div>
+          <div>
+            <dt>Children</dt>
+            <dd id="nodeChildren">-</dd>
+          </div>
+          <div>
+            <dt>Stage note</dt>
+            <dd id="nodeStageNote">Hover over different nodes to relate graph structure to the active preprocessing stage.</dd>
+          </div>
+        </dl>
+      </aside>
+    </div>
+
+    <script src="./main.js"></script>
+  </body>
+</html>
