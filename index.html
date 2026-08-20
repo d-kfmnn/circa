@@ -54,6 +54,10 @@
           <div id="preprocessingView">
             <div class="timeline-card progress-card">
               <div class="control-group phase-tabs" id="phaseTabsPreprocessing" role="tablist" aria-label="Choose pipeline phase"></div>
+              <div class="toolbar-group pipeline-controls">
+                <button id="pipelineUndoAll" class="ghost-button toolbar-button" type="button" title="Jump back to the start of preprocessing">&laquo; Undo all</button>
+                <button id="pipelineRunAll" class="ghost-button accent-button toolbar-button" type="button" title="Jump to the end of preprocessing">Run all &raquo;</button>
+              </div>
               <p id="stageSummary" class="progress-summary"></p>
               <ol id="stageList" class="stage-list"></ol>
             </div>
@@ -75,6 +79,33 @@
                   </svg>
                 </div>
               </div>
+
+              <aside id="nodeInspector" class="node-inspector inspector-card" aria-live="polite">
+                <p class="section-label">Node inspector</p>
+                <h3 id="nodeName">Hover over a node to examine details</h3>
+                <p id="nodeRole" class="inspector-role"></p>
+                <p id="nodePolynomial" class="inspector-poly">
+                  The underlying circuit polynomial will appear here.
+                </p>
+                <dl class="inspector-meta">
+                  <div>
+                    <dt>Signal</dt>
+                    <dd id="nodeSignal">-</dd>
+                  </div>
+                  <div>
+                    <dt>Parents</dt>
+                    <dd id="nodeParents">-</dd>
+                  </div>
+                  <div>
+                    <dt>Children</dt>
+                    <dd id="nodeChildren">-</dd>
+                  </div>
+                  <div>
+                    <dt>Stage note</dt>
+                    <dd id="nodeStageNote">Hover over different nodes to relate graph structure to the active preprocessing stage.</dd>
+                  </div>
+                </dl>
+              </aside>
             </div>
           </div>
 
@@ -113,32 +144,6 @@
         </section>
       </main>
 
-      <aside id="nodePopover" class="node-popover inspector-card" aria-live="polite" aria-hidden="true">
-        <p class="section-label">Node inspector</p>
-        <h3 id="nodeName">Hover a node</h3>
-        <p id="nodeRole" class="inspector-role"></p>
-        <p id="nodePolynomial" class="inspector-poly">
-          The underlying circuit polynomial will appear here.
-        </p>
-        <dl class="inspector-meta">
-          <div>
-            <dt>Signal</dt>
-            <dd id="nodeSignal">-</dd>
-          </div>
-          <div>
-            <dt>Parents</dt>
-            <dd id="nodeParents">-</dd>
-          </div>
-          <div>
-            <dt>Children</dt>
-            <dd id="nodeChildren">-</dd>
-          </div>
-          <div>
-            <dt>Stage note</dt>
-            <dd id="nodeStageNote">Hover over different nodes to relate graph structure to the active preprocessing stage.</dd>
-          </div>
-        </dl>
-      </aside>
     </div>
 
     <script src="./main.js"></script>

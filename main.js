@@ -276,9 +276,6 @@ const state = {
   specStepIndex: 0
 };
 
-const POPOVER_DELAY_MS = 140;
-let popoverDelayTimer = null;
-
 const graphElement = document.querySelector("#graph");
 const examplePicker = document.querySelector("#examplePicker");
 const phaseTabsPreprocessing = document.querySelector("#phaseTabsPreprocessing");
@@ -298,6 +295,8 @@ const specSliceForward = document.querySelector("#specSliceForward");
 const specStepRunAll = document.querySelector("#specStepRunAll");
 const specStepReset = document.querySelector("#specStepReset");
 
+const pipelineUndoAll = document.querySelector("#pipelineUndoAll");
+const pipelineRunAll = document.querySelector("#pipelineRunAll");
 const stageSummary = document.querySelector("#stageSummary");
 const polynomialTitle = document.querySelector("#polynomialTitle");
 const polynomialCount = document.querySelector("#polynomialCount");
@@ -311,7 +310,7 @@ const nodeSignal = document.querySelector("#nodeSignal");
 const nodeParents = document.querySelector("#nodeParents");
 const nodeChildren = document.querySelector("#nodeChildren");
 const nodeStageNote = document.querySelector("#nodeStageNote");
-const nodePopover = document.querySelector("#nodePopover");
+const nodeInspector = document.querySelector("#nodeInspector");
 const zoomOut = document.querySelector("#zoomOut");
 const zoomIn = document.querySelector("#zoomIn");
 const zoomReset = document.querySelector("#zoomReset");
@@ -680,6 +679,44 @@ function renderGraphToolbar() {
   zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
 }
 
+// The two ends of the preprocessing pipeline: the untouched gate-constraint
+// set (stage 0, nothing applied) and the fully preprocessed set (last stage,
+// every microStep applied) - the same end state finalOverlay() computes.
+function pipelineStartState() {
+  const stages = currentExample().stages;
+  return { stageIndex: 0, microStepIndex: stages[0].microSteps?.length ? 0 : null };
+}
+
+function pipelineEndState() {
+  const stages = currentExample().stages;
+  const lastIndex = stages.length - 1;
+  return { stageIndex: lastIndex, microStepIndex: stages[lastIndex].microSteps?.length ?? 0 };
+}
+
+function isPipelineAtStart() {
+  return state.stageIndex === 0 && currentMicroStepLimit() === 0;
+}
+
+function isPipelineAtEnd() {
+  const stages = currentExample().stages;
+  const lastIndex = stages.length - 1;
+  return state.stageIndex === lastIndex && currentMicroStepLimit() === (stages[lastIndex].microSteps?.length ?? 0);
+}
+
+function jumpPipelineTo(target) {
+  state.stageIndex = target.stageIndex;
+  state.microStepIndex = target.microStepIndex;
+  render();
+}
+
+function renderPipelineControls() {
+  pipelineUndoAll.disabled = isPipelineAtStart();
+  pipelineRunAll.disabled = isPipelineAtEnd();
+}
+
+pipelineUndoAll.addEventListener("click", () => jumpPipelineTo(pipelineStartState()));
+pipelineRunAll.addEventListener("click", () => jumpPipelineTo(pipelineEndState()));
+
 function renderStageList() {
   const example = currentExample();
   stageList.innerHTML = example.stages
@@ -905,17 +942,12 @@ function bindPolynomialInteractions() {
       state.activeNodeId = polyNodeId;
       updateGraphHighlight();
       renderInspector();
-      const nodeElement = graphElement.querySelector(`[data-node-id="${polyNodeId}"]`);
-      if (nodeElement) {
-        showNodePopover(nodeElement);
-      }
     };
 
     const clear = () => {
       state.activeNodeId = null;
       updateGraphHighlight();
       renderInspector();
-      hideNodePopover();
     };
 
     element.addEventListener("mouseenter", activate);
@@ -960,7 +992,8 @@ function renderInspector() {
   const dimmedNodes = currentStageDimmedSet();
 
   if (!activeNode) {
-    nodeName.textContent = "Hover a node";
+    nodeInspector.classList.add("is-empty");
+    nodeName.textContent = "Hover over a node to examine details";
     nodeRole.textContent = example.stageNote;
     const firstRoot = [...rootUpdates.entries()][0];
     nodePolynomial.textContent = firstRoot
@@ -973,6 +1006,7 @@ function renderInspector() {
     return;
   }
 
+  nodeInspector.classList.remove("is-empty");
   const parents = nodeParentsFor(activeNode.id);
   const children = nodeChildrenFor(activeNode.id);
   const stagePolynomial = rootUpdates.get(activeNode.id);
@@ -999,68 +1033,6 @@ function renderInspector() {
   } else {
     nodeStageNote.textContent = activeNode.stageNote;
   }
-}
-
-function hideNodePopover() {
-  if (popoverDelayTimer) {
-    clearTimeout(popoverDelayTimer);
-    popoverDelayTimer = null;
-  }
-  nodePopover.classList.remove("visible");
-  nodePopover.setAttribute("aria-hidden", "true");
-}
-
-function scheduleNodePopover(anchorElement, nodeId) {
-  if (popoverDelayTimer) {
-    clearTimeout(popoverDelayTimer);
-  }
-
-  popoverDelayTimer = setTimeout(() => {
-    popoverDelayTimer = null;
-    if (state.activeNodeId !== nodeId) {
-      return;
-    }
-    showNodePopover(anchorElement);
-  }, POPOVER_DELAY_MS);
-}
-
-function showNodePopover(anchorElement) {
-  if (!anchorElement || !state.activeNodeId) {
-    hideNodePopover();
-    return;
-  }
-
-  nodePopover.classList.add("visible");
-  nodePopover.setAttribute("aria-hidden", "false");
-
-  const anchorRect = anchorElement.getBoundingClientRect();
-  const margin = 18;
-  const horizontalOffset = 34;
-  const verticalOffset = 22;
-  const popoverWidth = nodePopover.offsetWidth || 320;
-  const popoverHeight = nodePopover.offsetHeight || 260;
-
-  let left = anchorRect.right + horizontalOffset;
-  let top = anchorRect.top - verticalOffset;
-
-  if (left + popoverWidth > window.innerWidth - margin) {
-    left = anchorRect.left - popoverWidth - horizontalOffset;
-  }
-
-  if (left < margin) {
-    left = margin;
-  }
-
-  if (top + popoverHeight > window.innerHeight - margin) {
-    top = window.innerHeight - popoverHeight - margin;
-  }
-
-  if (top < margin) {
-    top = margin;
-  }
-
-  nodePopover.style.left = `${left}px`;
-  nodePopover.style.top = `${top}px`;
 }
 
 function renderHeader() {
@@ -1152,40 +1124,13 @@ function bindGraphInteractions() {
       renderInspector();
     };
 
-    // Hovering a slice's own output node highlights its member gates across
-    // the graph - showing the floating node inspector on top of it would
-    // cover exactly the nodes it just marked, so skip the popover there.
-    const isSliceOutputHover = () => hoveredSliceValue() !== null;
-
-    element.addEventListener("mouseenter", () => {
-      focusNode();
-      if (isSliceOutputHover()) {
-        hideNodePopover();
-      } else if (nodePopover.classList.contains("visible")) {
-        showNodePopover(element);
-      } else {
-        scheduleNodePopover(element, nodeId);
-      }
-    });
-    element.addEventListener("focus", () => {
-      focusNode();
-      if (!isSliceOutputHover()) {
-        showNodePopover(element);
-      }
-    });
-    element.addEventListener("click", () => {
-      focusNode();
-      if (!isSliceOutputHover()) {
-        showNodePopover(element);
-      }
-    });
+    element.addEventListener("mouseenter", focusNode);
+    element.addEventListener("focus", focusNode);
+    element.addEventListener("click", focusNode);
     element.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         focusNode();
-        if (!isSliceOutputHover()) {
-          showNodePopover(element);
-        }
       }
     });
   });
@@ -1195,7 +1140,6 @@ graphElement.addEventListener("mouseleave", () => {
   state.activeNodeId = null;
   updateGraphHighlight();
   renderInspector();
-  hideNodePopover();
 });
 
 function edgePath(edge, map, useStoredPoints = true) {
@@ -1477,13 +1421,11 @@ function render() {
   }
 
   renderStageList();
+  renderPipelineControls();
   renderPolynomialList();
   renderGraphToolbar();
   renderGraph();
   renderInspector();
-  if (!state.activeNodeId) {
-    hideNodePopover();
-  }
 }
 
 zoomOut.addEventListener("click", () => {

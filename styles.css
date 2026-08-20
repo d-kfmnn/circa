@@ -478,8 +478,29 @@ body::before {
   margin-bottom: 4px;
 }
 
+.pipeline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pipeline-controls .toolbar-button {
+  padding: 7px 11px;
+  font-size: 0.68rem;
+}
+
+.pipeline-controls .toolbar-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .graph-and-inspector {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 18px;
+  align-items: start;
 }
 
 .spec-polynomial-expr {
@@ -740,20 +761,21 @@ body::before {
     linear-gradient(180deg, rgba(255, 250, 242, 0.98), rgba(243, 234, 220, 0.95));
 }
 
-.node-popover {
-  position: fixed;
-  z-index: 30;
-  width: min(360px, calc(100vw - 24px));
-  max-height: min(70vh, 520px);
+.node-inspector {
+  position: sticky;
+  top: 18px;
+  max-height: calc(100vh - 36px);
   overflow: auto;
-  padding: 14px;
-  display: none;
-  pointer-events: none;
-  box-shadow: 0 18px 40px rgba(66, 46, 17, 0.22);
+  padding: 18px;
+  border-radius: 26px;
+  border: 1px solid rgba(68, 49, 18, 0.1);
+  box-shadow: 0 12px 28px rgba(66, 46, 17, 0.12);
 }
 
-.node-popover.visible {
-  display: flex;
+.node-inspector.is-empty h3 {
+  font-size: 1.05rem;
+  line-height: 1.45;
+  color: var(--rust);
 }
 
 .inspector-card h3 {
@@ -813,6 +835,15 @@ body::before {
   .graph-card {
     height: min(62vh, 540px);
   }
+
+  .graph-and-inspector {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .node-inspector {
+    position: static;
+    max-height: none;
+  }
 }
 
 @media (max-width: 720px) {
@@ -826,7 +857,8 @@ body::before {
   .timeline-card,
   .poly-card,
   .graph-card,
-  .inspector-card {
+  .inspector-card,
+  .node-inspector {
     border-radius: 22px;
   }
 
