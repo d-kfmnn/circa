@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=f949147947" />
+    <link rel="stylesheet" href="./styles.css?v=5c1687edc8" />
   </head>
   <body>
     <div class="page-shell">
@@ -111,29 +111,46 @@
               <div class="timeline-header">
                 <div>
                   <p class="section-label">Specification rewrite</p>
-                  <h3>Reduce to the specification polynomial</h3>
+                  <h3>Rewrite the specification polynomial to 0</h3>
                 </div>
               </div>
-              <p class="section-label">Specification polynomial</p>
+              <div class="spec-polynomial-header">
+                <p class="section-label">Current specification polynomial</p>
+                <span id="specTermCount" class="chip"></span>
+              </div>
               <p id="specPolynomial" class="spec-polynomial-expr"></p>
+              <p id="specStepCaption" class="spec-step-caption" aria-live="polite"></p>
             </div>
 
             <div class="graph-column">
               <div class="graph-toolbar">
                 <div class="toolbar-group">
-                  <button id="specSliceBack" class="ghost-button toolbar-button" type="button" title="Jump to previous slice">&laquo;</button>
-                  <button id="specStepBack" class="ghost-button toolbar-button" type="button">&larr;</button>
+                  <button id="specStepReset" class="ghost-button toolbar-button" type="button" title="Back to the unrewritten specification">&laquo; Reset</button>
+                  <button id="specStepBackMany" class="ghost-button toolbar-button" type="button" aria-label="Rewind: undo the last 10% of the substitutions"><svg class="fast-icon" viewBox="0 0 16 10" aria-hidden="true"><path d="M8 0 L1 5 L8 10 Z M15 0 L8 5 L15 10 Z"></path></svg></button>
+                  <button id="specStepBack" class="ghost-button toolbar-button" type="button" aria-label="Undo the last substitution">&larr;</button>
                   <span id="specStepLabel" class="chip toolbar-chip">0 / 0</span>
-                  <button id="specStepForward" class="ghost-button accent-button toolbar-button" type="button">&rarr;</button>
-                  <button id="specSliceForward" class="ghost-button accent-button toolbar-button" type="button" title="Jump to next slice">&raquo;</button>
+                  <button id="specStepForward" class="ghost-button accent-button toolbar-button" type="button" aria-label="Substitute the next gate">&rarr;</button>
+                  <button id="specStepForwardMany" class="ghost-button accent-button toolbar-button" type="button" aria-label="Fast forward: substitute the next 10% of the gates"><svg class="fast-icon" viewBox="0 0 16 10" aria-hidden="true"><path d="M1 0 L8 5 L1 10 Z M8 0 L15 5 L8 10 Z"></path></svg></button>
+                  <button id="specStepRunAll" class="ghost-button accent-button toolbar-button" type="button" title="Substitute every gate">Run all &raquo;</button>
                 </div>
                 <div class="toolbar-group">
-                  <button id="specStepRunAll" class="ghost-button toolbar-button" type="button">Run all</button>
-                  <button id="specStepReset" class="ghost-button toolbar-button" type="button">Reset</button>
+                  <button id="specZoomOut" class="ghost-button toolbar-button" type="button" aria-label="Zoom out">-</button>
+                  <span id="specZoomLabel" class="chip toolbar-chip">100%</span>
+                  <button id="specZoomIn" class="ghost-button toolbar-button" type="button" aria-label="Zoom in">+</button>
+                  <button id="specZoomFit" class="ghost-button toolbar-button" type="button" title="Zoom so the whole graph is visible">Fit</button>
                 </div>
               </div>
-              <div class="graph-card spec-log-card">
-                <div id="specStepLog" class="spec-step-log" aria-live="polite"></div>
+              <p class="spec-legend">
+                <span class="spec-legend-item"><span class="spec-legend-swatch cut" aria-hidden="true"></span>cut</span>
+                <span class="spec-legend-item"><span class="spec-legend-swatch in-cut" aria-hidden="true"></span>in the polynomial</span>
+                <span class="spec-legend-item"><span class="spec-legend-swatch current" aria-hidden="true"></span>just substituted</span>
+                <span class="spec-legend-item"><span class="spec-legend-swatch rewritten" aria-hidden="true"></span>already substituted</span>
+              </p>
+              <div class="graph-card">
+                <svg id="specGraph" role="img" aria-labelledby="specGraphTitle specGraphDesc">
+                  <title id="specGraphTitle">Rewriting cut</title>
+                  <desc id="specGraphDesc">The circuit after preprocessing. A dashed line separates the gates already substituted into the specification polynomial from those not yet substituted.</desc>
+                </svg>
               </div>
             </div>
           </div>
@@ -142,6 +159,6 @@
 
     </div>
 
-    <script src="./main.js?v=42c7a68528"></script>
+    <script src="./main.js?v=4ab3ec9fb4"></script>
   </body>
 </html>

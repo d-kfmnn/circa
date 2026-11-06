@@ -34,7 +34,7 @@ def run_command(command, allowed_returncodes=None):
 def parse_gate_log(log_text):
     """Parse AMulet's `-verify -v4` output.
 
-    Besides the existing partial-product/xor-gate/slice bookkeeping, this
+    Besides the existing partial-product/xor-gate bookkeeping, this
     also splits the (now four) `print_all_gate_constraints` dumps into
     separate phase snapshots: `baseline` (before any elimination),
     `xor_removed` (after `remove_internal_xor_gates`), and then either
@@ -57,13 +57,9 @@ def parse_gate_log(log_text):
     """
     partial_products = []
     xor_gates = []
-    slice_outputs = []
-    slice_memberships = {}
     gate_polynomials = {}
     notes = []
     current_gate = None
-    current_slice = None
-    in_slice_listing = False
 
     snapshots = {}
     counts = {}
@@ -81,12 +77,6 @@ def parse_gate_log(log_text):
     for raw_line in log_text.splitlines():
         line = raw_line.strip()
         if not line:
-            if in_slice_listing:
-                current_slice = None
-            continue
-
-        if "filled" in line and "slices" in line:
-            in_slice_listing = True
             continue
 
         partial_match = re.search(r"partial product\s+(\w+)", line, re.IGNORECASE)
@@ -98,38 +88,6 @@ def parse_gate_log(log_text):
         if xor_match:
             xor_gates.append(xor_match.group(1))
             continue
-
-        slice_match = re.search(r"init slice\s+(\d+)\s+with output\s+(\w+)", line, re.IGNORECASE)
-        if slice_match:
-            slice_outputs.append({"slice": int(slice_match.group(1)), "output": slice_match.group(2)})
-            continue
-
-        # On the XOR-chain slicing path (`slicing_xor()` in slicing.cpp) AMulet
-        # never prints the `fill_slices`/`print_slices` per-slice listing below -
-        # that dump only happens on the input-cone path (`slicing_non_xor()`).
-        # Instead each gate's slice is reported inline as it's assigned/moved:
-        # "xor-chain assign X to slice N" (slice_by_xor_chains) and "moved gate
-        # X to slice N" (fix_jut_gates, only called on the XOR path). Capturing
-        # these is the only way to get internal-gate slice membership for the
-        # (more common) XOR-chain benchmarks instead of leaving every internal
-        # gate ungrouped.
-        slice_assign_match = re.search(
-            r"(?:xor-chain assign|moved gate)\s+(\w+)\s+to slice\s+(\d+)", line, re.IGNORECASE
-        )
-        if slice_assign_match:
-            slice_memberships[slice_assign_match.group(1)] = int(slice_assign_match.group(2))
-            continue
-
-        if in_slice_listing:
-            listing_match = re.search(r"^\[amulet2\]\s+slice\s+(\d+)$", raw_line.strip(), re.IGNORECASE)
-            if listing_match:
-                current_slice = int(listing_match.group(1))
-                continue
-
-            node_match = re.search(r"^\[amulet2\]\s+(s\d+|l\d+)$", raw_line.strip(), re.IGNORECASE)
-            if current_slice is not None and node_match:
-                slice_memberships[node_match.group(1)] = current_slice
-                continue
 
         # Reduction-phase start markers: everything unlabeled between one of
         # these and its matching end marker below is that phase's individual
@@ -247,8 +205,6 @@ def parse_gate_log(log_text):
     return {
         "partial_products": partial_products,
         "xor_gates": xor_gates,
-        "slice_outputs": slice_outputs,
-        "slice_memberships": slice_memberships,
         "gate_polynomials": gate_polynomials,
         "notes": notes,
         "snapshots": snapshots,
@@ -326,109 +282,139 @@ def parse_reduction_trace(log_text):
 LEADING_GATE_RE = re.compile(r"^-(\w+)")
 
 
-def augment_slice_memberships_from_reduction(slice_memberships, steps):
-    """Backfill any gate the log-scraped slice listing missed using the final
-    specification-rewrite trace as ground truth.
-
-    Every gate still alive once preprocessing finishes gets substituted into
-    the running remainder exactly once, grouped under its `slice-start`
-    .. `slice-end` bracket - and each "reducing by <polynomial>;" line's
-    leading term names that gate (same `-name+...` convention the rest of
-    this file already relies on, e.g. the `owner_match` parsing above). This
-    is the only reliable, path-independent source of slice membership: on
-    the XOR-chain slicing path AMulet's own `-v4` trace does not log every
-    internal reassignment (some moves only print the gate name, not which
-    slice it moved to), so scraping `slice_by_xor_chains`'s messages alone
-    leaves real gaps. It only covers gates that survive to the end, not ones
-    eliminated earlier in preprocessing, but that's exactly the set that
-    still needs a slice tag once it reaches this point.
-    """
-    current_slice = None
-    for step in steps:
-        if step["type"] in ("slice-start", "slice-end"):
-            current_slice = step.get("slice") if step["type"] == "slice-start" else None
-            continue
-        if step["type"] == "reduce" and current_slice is not None:
-            match = LEADING_GATE_RE.match(step["polynomial"].strip())
-            if match:
-                slice_memberships[match.group(1)] = current_slice
+POLY_TERM_RE = re.compile(r"([+-]?)([^+-]+)")
 
 
-SPEC_TERM_RE = re.compile(r"[+-]?[^+-]+")
-SPEC_TERM_COEFF_RE = re.compile(r"([+-]?\d*)\*?(.*)")
+def parse_polynomial(text):
+    """AMulet's printed polynomial (`-256*l240*b3*a3+128*l240+128;`) as
+    {monomial: coefficient}. A monomial is the sorted tuple of its variables
+    (`()` for the constant term); variables are Boolean (x*x = x), so it is a
+    set."""
+    poly = {}
+    body = text.strip().rstrip(";").replace(" ", "")
+    if not body or body == "0":
+        return poly
+    for sign, term in POLY_TERM_RE.findall(body):
+        coeff = 1
+        variables = set()
+        for factor in term.split("*"):
+            if factor.isdigit():
+                coeff *= int(factor)
+            else:
+                variables.add(factor)
+        monomial = tuple(sorted(variables))
+        poly[monomial] = poly.get(monomial, 0) + (-coeff if sign == "-" else coeff)
+        if poly[monomial] == 0:
+            del poly[monomial]
+    return poly
 
 
-def split_specification_by_slice(spec_expression):
-    """Splits AMulet's flat top-level specification polynomial (e.g.
-    `-128*s7-64*s6+...+64*a3*b3+...-s0+a0*b0;`) into the per-slice increment
-    it is built up from.
-
-    AMulet computes this internally, slice by slice from the MSB down, as
-    `inc_spec_poly(i)` (elimination.cpp): the weighted output term `2^i * s_i`
-    (the slice's "output gate") plus the weighted partial-product terms
-    `2^i * a_k*b_j` with `k+j == i` that must cancel against it (the slice's
-    "partial products") - then adds it to the carried-forward remainder
-    before reducing by that slice's own internal gates. AMulet's `-v4` trace
-    never prints `inc_spec_poly(i)` itself, only the reduce steps that
-    consume it, so this reconstructs the same split from the coefficients of
-    the already-printed specification: every monomial's coefficient
-    magnitude is exactly `2^i` for the slice it belongs to (verified against
-    all 4 demo circuits - every coefficient is a power of two, one output
-    term per slice, and the rest are the slice's partial products).
-    """
-    body = spec_expression.strip()
-    if body.endswith(";"):
-        body = body[:-1]
-    body = body.replace(" ", "")
-    if not body:
-        return {}
-
-    buckets = {}
-    for raw_term in SPEC_TERM_RE.findall(body):
-        coeff_text, _rest = SPEC_TERM_COEFF_RE.match(raw_term).groups()
-        if coeff_text in ("", "+"):
-            coeff = 1
-        elif coeff_text == "-":
-            coeff = -1
-        else:
-            coeff = int(coeff_text)
-        slice_index = int(round(math.log2(abs(coeff))))
-        buckets.setdefault(slice_index, []).append(raw_term)
-
-    def join_terms(terms):
-        text = "".join(terms)
-        if text.startswith("+"):
-            text = text[1:]
-        return f"{text};"
-
-    result = {}
-    for slice_index, terms in buckets.items():
-        output_terms = [term for term in terms if re.search(r"\bs\d+\b", term)]
-        partial_product_terms = [term for term in terms if term not in output_terms]
-        result[slice_index] = {
-            "outputTerm": join_terms(output_terms) if output_terms else None,
-            "partialProducts": join_terms(partial_product_terms) if partial_product_terms else None,
-            "localSpecification": join_terms(terms),
-        }
+def add_polynomials(left, right, scale=1):
+    result = dict(left)
+    for monomial, coeff in right.items():
+        result[monomial] = result.get(monomial, 0) + scale * coeff
+        if result[monomial] == 0:
+            del result[monomial]
     return result
 
 
-def apply_specification_split(steps, spec_expression):
-    """Enriches each `slice-start` step in-place with the slice's local
-    specification split (see `split_specification_by_slice`), so the
-    Specification rewrite tab can show it before the slice's own reduce
-    steps run.
+def substitute_gate(poly, gate, tail):
+    """Replace variable `gate` by the polynomial `tail` everywhere in `poly`."""
+    result = {}
+    for monomial, coeff in poly.items():
+        if gate not in monomial:
+            products = [(monomial, coeff)]
+        else:
+            rest = set(monomial) - {gate}
+            products = [(tuple(sorted(rest | set(tail_monomial))), coeff * tail_coeff) for tail_monomial, tail_coeff in tail.items()]
+        for product, value in products:
+            result[product] = result.get(product, 0) + value
+    return {monomial: coeff for monomial, coeff in result.items() if coeff != 0}
+
+
+def format_polynomial(poly):
+    if not poly:
+        return "0"
+    terms = []
+    for monomial in sorted(poly, key=lambda value: (-len(value), value)):
+        coeff = poly[monomial]
+        sign = "-" if coeff < 0 else "+"
+        magnitude = abs(coeff)
+        if not monomial:
+            body = str(magnitude)
+        elif magnitude == 1:
+            body = "*".join(monomial)
+        else:
+            body = f"{magnitude}*" + "*".join(monomial)
+        terms.append(sign + body)
+    text = "".join(terms)
+    return text[1:] if text.startswith("+") else text
+
+
+LEADING_GATE_RE = re.compile(r"^-(\w+)")
+
+
+def build_global_rewrite(spec_expression, trace, output_count):
+    """Turn AMulet's slice-by-slice reduction trace into one rewrite of the
+    whole specification polynomial, gate by gate, with no slices.
+
+    AMulet's `reduce()` (elimination.cpp) starts each slice i, from the MSB
+    down, by adding `inc_spec_poly(i)` = 2^i*s_i - sum(2^i*a_k*b_j) for
+    k+j == i to its running remainder, then substitutes that slice's gates.
+    Its logged remainder therefore only holds the slices started so far. The
+    whole specification polynomial at any point is that remainder plus the
+    `inc_spec_poly` terms of the slices not started yet, which is what this
+    returns per step. Note `inc_spec_poly` puts the outputs first with a
+    positive sign: the spec file `-certify` writes is its negation.
+
+    The slice increments are recovered from the spec's coefficients (each
+    term's |coefficient| is 2^i for its slice). Every step is checked to be
+    exactly the previous polynomial with that gate substituted - modulo
+    2^(2n), since on the XOR-chain path AMulet reduces coefficients with
+    `mod_poly` after each step - so a wrong reconstruction fails loudly here
+    instead of showing a bogus polynomial.
+
+    Returns the initial polynomial, then per step the gate rewritten, the
+    gate polynomial used and the change to the whole polynomial (`delta`,
+    small even when the polynomial has thousands of terms), plus the final
+    remainder.
     """
-    slice_specs = split_specification_by_slice(spec_expression)
-    for step in steps:
-        if step["type"] != "slice-start":
+    modulus = 1 << output_count
+    current = {monomial: -coeff for monomial, coeff in parse_polynomial(spec_expression).items()}
+    increments = {}
+    for monomial, coeff in current.items():
+        slice_index = abs(coeff).bit_length() - 1
+        if abs(coeff) != 1 << slice_index:
+            raise ValueError(f"specification term {monomial} has coefficient {coeff}, not a power of two")
+        increments.setdefault(slice_index, {})[monomial] = coeff
+
+    initial = dict(current)
+    not_started = dict(current)
+    steps = []
+    for entry in trace:
+        if entry["type"] == "slice-start":
+            not_started = add_polynomials(not_started, increments.get(entry["slice"], {}), -1)
             continue
-        spec = slice_specs.get(step["slice"])
-        if not spec:
+        if entry["type"] != "reduce":
             continue
-        step["outputTerm"] = spec["outputTerm"]
-        step["partialProducts"] = spec["partialProducts"]
-        step["localSpecification"] = spec["localSpecification"]
+        gate_match = LEADING_GATE_RE.match(entry["polynomial"].strip())
+        gate_poly = parse_polynomial(entry["polynomial"])
+        if not gate_match or gate_poly.get((gate_match.group(1),)) != -1:
+            raise ValueError(f"unexpected gate polynomial {entry['polynomial']}")
+        gate = gate_match.group(1)
+        tail = {monomial: coeff for monomial, coeff in gate_poly.items() if monomial != (gate,)}
+        following = add_polynomials(parse_polynomial(entry["remainder"]), not_started)
+        mismatch = add_polynomials(substitute_gate(current, gate, tail), following, -1)
+        if any(coeff % modulus for coeff in mismatch.values()):
+            raise ValueError(f"rewrite step for {gate} is not a substitution of the previous specification polynomial")
+        steps.append({
+            "gate": gate,
+            "polynomial": entry["polynomial"],
+            "delta": format_polynomial(add_polynomials(following, current, -1)),
+        })
+        current = following
+
+    return {"polynomial": format_polynomial(initial), "steps": steps, "remainder": format_polynomial(current)}
 
 
 def parse_polynomial_file(polys_text):
@@ -771,7 +757,7 @@ def coordinate(value):
     return round(value, 2)
 
 
-def build_aig_graph(input_path, verify_log, gate_expressions, output_names, partial_products, xor_gates, slice_memberships, layout="auto"):
+def build_aig_graph(input_path, verify_log, gate_expressions, output_names, partial_products, xor_gates, layout="auto"):
     if layout == "auto":
         layout = "dot" if aig_and_gate_count(input_path) <= DOT_MAX_AND_GATES else "layered"
     with tempfile.TemporaryDirectory(prefix="aigvis-") as temp_dir:
@@ -835,7 +821,6 @@ def build_aig_graph(input_path, verify_log, gate_expressions, output_names, part
                 "y": coordinate(flipped_y(info["y"])),
                 "width": coordinate(info["width"]),
                 "height": coordinate(info["height"]),
-                "slice": slice_memberships.get(node_id),
             }
         )
 
@@ -860,7 +845,6 @@ def build_aig_graph(input_path, verify_log, gate_expressions, output_names, part
                 "y": coordinate(flipped_y(info["y"])),
                 "width": coordinate(info["width"]),
                 "height": coordinate(info["height"]),
-                "slice": slice_memberships.get(output_label, int(name[1:])),
             }
         )
 
@@ -938,10 +922,6 @@ def build_stages(example, gate_data, output_equations):
         {"label": label, "expression": gate_data["gate_polynomials"].get(label, f"{label};")}
         for label in gate_data["xor_gates"][:12]
     ]
-    slice_polys = [
-        {"label": f"slice {item['slice']}", "expression": f"{item['output']}: {output_equations.get(item['output'], 'output relation unavailable')}"}
-        for item in gate_data["slice_outputs"]
-    ]
 
     snapshots = gate_data["snapshots"]
     counts = gate_data["counts"]
@@ -975,29 +955,17 @@ def build_stages(example, gate_data, output_equations):
     if "xor_removed" in snapshots:
         xor_count = counts.get("xor_removed_count", 0)
         stages.append({
-            "name": "Remove internal xor gates",
-            "summary": f"AMulet removed {xor_count} internal XOR gates by direct substitution. Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
+            "name": "Eliminate internal xor gates",
+            "summary": f"AMulet eliminated {xor_count} internal XOR gates by direct substitution. Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
             "polynomials": [],
-            "microSteps": build_micro_steps(micro_events["xor_removed"], "removed"),
+            "microSteps": build_micro_steps(micro_events["xor_removed"], "eliminated"),
         })
-
-    # Comes after xor removal (matching AMulet's own order: slicing only runs
-    # once the internal xor gates are gone) rather than before it. No
-    # `dimmedNodes`/`rootUpdates` of its own - it deliberately isn't a
-    # checkpoint, so the overlay lookup falls through to "Remove internal xor
-    # gates" above and shows every one of those gates already gone instead of
-    # dangling as ungrouped, no-longer-existent nodes.
-    stages.append({
-        "name": "Initialize slices",
-        "summary": "Output bits are grouped into slices that anchor the elimination and decomposition passes.",
-        "polynomials": slice_polys or summary_polys,
-    })
 
     if "elimination" in snapshots:
         elim_count = counts.get("elimination_count", 0)
         stages.append({
             "name": "Eliminate single-occurrence nodes",
-            "summary": f"AMulet eliminated {elim_count} single-occurrence nodes by substituting each into its parent gate (XOR-based slicing path). Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
+            "summary": f"AMulet eliminated {elim_count} single-occurrence nodes by substituting each into its parent gate. Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
             "polynomials": [],
             "microSteps": build_micro_steps(micro_events["elimination"], "eliminated"),
         })
@@ -1007,7 +975,7 @@ def build_stages(example, gate_data, output_equations):
         booth_note = f" ({booth_count} of them first isolated via booth-pattern elimination)" if booth_count else ""
         stages.append({
             "name": "Eliminate single-occurrence nodes",
-            "summary": f"AMulet decomposed {decomp_count} remaining single-occurrence gates{booth_note}, since this circuit takes the input-cone slicing path instead of XOR-based slicing. Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
+            "summary": f"AMulet decomposed {decomp_count} remaining single-occurrence gates{booth_note}, since this circuit has no XOR chains to eliminate along. Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
             "polynomials": [],
             "microSteps": build_micro_steps(micro_events["decomposition"], "decomposed"),
         })
@@ -1015,10 +983,10 @@ def build_stages(example, gate_data, output_equations):
     if micro_events["unassigned_removed"]:
         unassigned_count = counts.get("unassigned_removed_count", 0)
         stages.append({
-            "name": "Remove gates without a slice",
-            "summary": f"AMulet discarded {unassigned_count} gates that never received a slice assignment during XOR-chain slicing, substituting each into its parent gate. Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
+            "name": "Eliminate no clear COI nodes",
+            "summary": f"AMulet eliminated {unassigned_count} gates without a clear cone of influence (COI), substituting each into its parent gate. Use the node-by-node control below to apply them one at a time, or Next/Run all to skip ahead.",
             "polynomials": [],
-            "microSteps": build_micro_steps(micro_events["unassigned_removed"], "removed"),
+            "microSteps": build_micro_steps(micro_events["unassigned_removed"], "eliminated"),
         })
 
     return stages
@@ -1047,8 +1015,6 @@ def build_example(input_path, graph_input_path, polys_text, spec_text, verify_lo
     xor_gates = set(gate_data["xor_gates"])
 
     reduction = parse_reduction_trace(verify_log)
-    augment_slice_memberships_from_reduction(gate_data["slice_memberships"], reduction["steps"])
-    apply_specification_split(reduction["steps"], spec_expression)
 
     aig_graph = build_aig_graph(
         graph_input_path,
@@ -1057,7 +1023,6 @@ def build_example(input_path, graph_input_path, polys_text, spec_text, verify_lo
         output_names,
         partial_products,
         xor_gates,
-        gate_data["slice_memberships"],
         layout,
     )
 
@@ -1070,7 +1035,6 @@ def build_example(input_path, graph_input_path, polys_text, spec_text, verify_lo
         "stageNote": "This benchmark is rendered from real AMulet output instead of hand-authored toy data.",
         "graphWidth": aig_graph["graphWidth"],
         "graphHeight": aig_graph["graphHeight"],
-        "slices": sorted({slice_index for slice_index in gate_data["slice_memberships"].values()}),
         "nodes": aig_graph["nodes"],
         "edges": aig_graph["edges"],
         "stages": [],
@@ -1079,8 +1043,7 @@ def build_example(input_path, graph_input_path, polys_text, spec_text, verify_lo
     example["stages"] = build_stages(example, gate_data, output_equations)
 
     example["specification"] = {
-        "polynomial": spec_expression,
-        "steps": reduction["steps"],
+        **build_global_rewrite(spec_expression, reduction["steps"], len(output_names)),
         "result": reduction["result"],
     }
     return example

@@ -11,6 +11,7 @@
   --teal: #0f766e;
   --rust: #9a3412;
   --highlight: #f97316;
+  --cut: #dc2626;
   --shadow: 0 28px 70px rgba(66, 46, 17, 0.16);
 }
 
@@ -174,8 +175,17 @@ body::before {
 }
 
 .graph-picker {
-  justify-content: flex-start;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   margin-bottom: 4px;
+}
+
+/* One row of circuit buttons (see pickerRows in main.js). */
+.picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .pill-button,
@@ -460,20 +470,6 @@ body::before {
   background: rgba(255, 241, 226, 0.92);
 }
 
-.poly-slice-header {
-  margin: 10px 0 2px;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--gold);
-}
-
-.poly-slice-header:first-child {
-  margin-top: 0;
-}
-
 .phase-tabs {
   margin-bottom: 4px;
 }
@@ -514,94 +510,100 @@ body::before {
   line-height: 1.5;
   word-break: break-word;
   color: var(--ink);
+  /* Always six lines tall, so stepping doesn't move everything below it;
+     longer polynomials (thousands of terms on sp-ar-rc-64) scroll. */
+  height: calc(6 * 1.5em + 30px);
+  overflow-y: auto;
 }
 
-.spec-log-card {
+.spec-polynomial-header {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.spec-step-log {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  align-content: flex-start;
+.spec-step-caption {
+  margin: 12px 0 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  /* One line, reserved even when empty, so the graph below never shifts. */
+  min-height: 1.5em;
+  color: var(--muted);
 }
 
-.spec-log-entry {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--surface-strong);
-  border: 1px solid rgba(68, 49, 18, 0.08);
+.spec-step-caption code {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.82rem;
-  line-height: 1.4;
-}
-
-.spec-log-entry p {
-  margin: 0;
-}
-
-.spec-log-divisor {
-  color: var(--muted);
-}
-
-.spec-log-remainder {
   color: var(--ink);
-  font-weight: 600;
-  margin-top: 4px !important;
+  word-break: break-word;
 }
 
-.spec-log-slice-header {
-  background: transparent;
-  border: none;
-  padding: 6px 2px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.74rem;
-  color: var(--rust);
-}
-
-.spec-log-slice-footer {
-  background: rgba(214, 140, 22, 0.1);
-  border-color: rgba(214, 140, 22, 0.3);
-}
-
-.spec-log-split {
-  background: rgba(15, 118, 110, 0.08);
-  border-color: rgba(15, 118, 110, 0.22);
-}
-
-.spec-log-split-title {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.72rem;
-  color: var(--muted);
-  margin-bottom: 4px !important;
-}
-
-.spec-log-split-row {
-  display: flex;
-  gap: 8px;
-  color: var(--ink);
-}
-
-.spec-log-split-label {
-  flex: 0 0 auto;
-  min-width: 96px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-size: 0.7rem;
-  color: var(--muted);
-}
-
-.spec-log-result {
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.95), rgba(214, 140, 22, 0.95));
+/* Shown under the final remainder once every gate is substituted. */
+.spec-verdict-banner {
+  display: block;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--teal);
   color: white;
-  text-align: center;
-  font-size: 0.9rem;
-  text-transform: uppercase;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
   letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.spec-verdict-banner.incorrect {
+  background: var(--rust);
+}
+
+.spec-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.spec-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.spec-legend-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 11px;
+  border-radius: 999px;
+  background: rgba(255, 248, 237, 0.98);
+  border: 2px solid rgba(99, 72, 23, 0.35);
+}
+
+.spec-legend-swatch.cut {
+  height: 0;
+  width: 22px;
+  border-radius: 0;
+  background: none;
+  border: none;
+  border-top: 3px dashed var(--cut);
+}
+
+.spec-legend-swatch.in-cut {
+  border-color: var(--teal);
+}
+
+.spec-legend-swatch.current {
+  background: var(--highlight);
+  border-color: var(--highlight);
+}
+
+.spec-legend-swatch.rewritten {
+  opacity: 0.3;
 }
 
 .graph-column {
@@ -635,6 +637,15 @@ body::before {
   font-size: 0.72rem;
 }
 
+/* Rewind / fast-forward double triangles, sized to sit in a text-height button. */
+.fast-icon {
+  display: inline-block;
+  width: 1.5em;
+  height: 1em;
+  vertical-align: -0.12em;
+  fill: currentColor;
+}
+
 .toolbar-chip {
   min-width: 70px;
 }
@@ -645,7 +656,20 @@ body::before {
   padding: 12px;
 }
 
-#graph {
+/* A graph bigger than its card can be dragged around (see enablePanning). */
+.graph-card.pannable {
+  cursor: grab;
+  user-select: none;
+}
+
+.graph-card.panning,
+.graph-card.panning .graph-node {
+  cursor: grabbing;
+}
+
+/* At least as wide as the card, so the viewBox centers a narrower graph. */
+#graph,
+#specGraph {
   display: block;
   min-width: 100%;
 }
@@ -731,26 +755,55 @@ body::before {
   filter: drop-shadow(0 0 10px rgba(249, 115, 22, 0.35));
 }
 
-.graph-node.slice-dim {
-  opacity: 0.2;
+/* Specification rewrite graph: the cut and the state of each gate. */
+.spec-cut {
+  fill: none;
+  stroke: var(--cut);
+  /* Screen pixels at every zoom, so it stays visible on zoomed-out graphs. */
+  vector-effect: non-scaling-stroke;
+  stroke-width: 2.5;
+  stroke-dasharray: 7 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
-.graph-node.slice-focus ellipse,
-.graph-node.slice-focus rect,
-.graph-node.slice-focus polygon {
-  stroke: var(--gold);
-  stroke-width: 3.5;
-  filter: drop-shadow(0 0 8px rgba(214, 140, 22, 0.4));
+.graph-node.spec-rewritten,
+.graph-edge.spec-rewritten {
+  opacity: 0.22;
 }
 
-.graph-edge.slice-focus {
-  stroke: var(--gold);
+.graph-node.spec-in-cut ellipse,
+.graph-node.spec-in-cut rect,
+.graph-node.spec-in-cut polygon {
+  stroke: var(--teal);
+  stroke-width: 4;
+}
+
+.graph-node.spec-current {
   opacity: 1;
-  stroke-width: 3;
 }
 
-.graph-edge.slice-dim {
-  opacity: 0.15;
+.graph-node.spec-current ellipse,
+.graph-node.spec-current rect,
+.graph-node.spec-current polygon {
+  fill: var(--highlight);
+  stroke: var(--highlight);
+}
+
+.graph-node.spec-current text {
+  fill: white;
+}
+
+/* Rewrite-order list: polynomials already substituted, and the latest one. */
+.poly-item.spec-used {
+  opacity: 0.45;
+}
+
+.poly-item.spec-current {
+  opacity: 1;
+  border-color: var(--highlight);
+  background: rgba(249, 115, 22, 0.14);
 }
 
 .inspector-card {
@@ -880,12 +933,6 @@ body::before {
     justify-content: flex-start;
   }
 }
-/* One wrapper per specification-rewrite step so the log can grow and shrink
-   step by step (see renderSpecStepLog); it adds no box of its own. */
-.spec-log-step-group {
-  display: contents;
-}
-
 /* A circuit whose data is still being fetched after its button was clicked. */
 .pill-button.loading {
   cursor: progress;

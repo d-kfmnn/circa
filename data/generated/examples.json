@@ -4,62 +4,69 @@
     "label": "btor2",
     "title": "btor2 multiplier",
     "nodeCount": 18,
-    "file": "examples/btor2.json?v=73067ade32"
+    "file": "examples/btor2.json?v=92d1482b9c"
   },
   {
     "id": "bp-os-cu-4",
     "label": "bp os cu 4",
     "title": "bp os cu 4 multiplier",
     "nodeCount": 213,
-    "file": "examples/bp-os-cu-4.json?v=9d21fb7dc3"
+    "file": "examples/bp-os-cu-4.json?v=a42fb5ec8e"
   },
   {
     "id": "bp-wt-cl-4",
     "label": "bp wt cl 4",
     "title": "bp wt cl 4 multiplier",
     "nodeCount": 207,
-    "file": "examples/bp-wt-cl-4.json?v=997d35e04a"
-  },
-  {
-    "id": "sp-ar-rc-4",
-    "label": "sp ar rc 4",
-    "title": "sp ar rc 4 multiplier",
-    "nodeCount": 136,
-    "file": "examples/sp-ar-rc-4.json?v=80ff8a7511"
+    "file": "examples/bp-wt-cl-4.json?v=ecc04b7b1b"
   },
   {
     "id": "sp-dt-lf-4",
     "label": "sp dt lf 4",
     "title": "sp dt lf 4 multiplier",
     "nodeCount": 132,
-    "file": "examples/sp-dt-lf-4.json?v=8153d84805"
+    "file": "examples/sp-dt-lf-4.json?v=21ec81aeec"
   },
   {
     "id": "sp-ar-rc-4_faulty",
     "label": "sp ar rc 4 faulty",
     "title": "sp ar rc 4 faulty multiplier",
     "nodeCount": 136,
-    "file": "examples/sp-ar-rc-4_faulty.json?v=6020153925"
+    "file": "examples/sp-ar-rc-4_faulty.json?v=b586bd2273"
+  },
+  {
+    "id": "sp-ar-rc-4",
+    "label": "sp ar rc 4",
+    "title": "sp ar rc 4 multiplier",
+    "nodeCount": 136,
+    "file": "examples/sp-ar-rc-4.json?v=36e0aeed07"
+  },
+  {
+    "id": "sp-ar-rc-8",
+    "label": "sp ar rc 8",
+    "title": "sp ar rc 8 multiplier",
+    "nodeCount": 656,
+    "file": "examples/sp-ar-rc-8.json?v=41749f6e71"
   },
   {
     "id": "sp-ar-rc-16",
     "label": "sp ar rc 16",
     "title": "sp ar rc 16 multiplier",
     "nodeCount": 2848,
-    "file": "examples/sp-ar-rc-16.json?v=c91ac139bb"
+    "file": "examples/sp-ar-rc-16.json?v=6da44b66bd"
   },
   {
     "id": "sp-ar-rc-32",
     "label": "sp ar rc 32",
     "title": "sp ar rc 32 multiplier",
     "nodeCount": 11840,
-    "file": "examples/sp-ar-rc-32.json?v=baa20b8744"
+    "file": "examples/sp-ar-rc-32.json?v=3919c257ca"
   },
   {
     "id": "sp-ar-rc-64",
     "label": "sp ar rc 64",
     "title": "sp ar rc 64 multiplier",
     "nodeCount": 48256,
-    "file": "examples/sp-ar-rc-64.json?v=e305dd72ba"
+    "file": "examples/sp-ar-rc-64.json?v=9b30ac78fa"
   }
 ]

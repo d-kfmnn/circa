@@ -91,26 +91,7 @@ const fallbackExamples = [
           { label: "p3", expression: "p3 - a0*a1*b0*b1 = 0" }
         ]
       }
-    ],
-    specification: {
-      polynomial: "p0 + 2*p1 + 4*p2 + 8*p3 - (a0 + 2*a1)*(b0 + 2*b1) = 0",
-      result: "CORRECT MULTIPLIER",
-      steps: [
-        { type: "slice-start", slice: 3 },
-        { type: "reduce", polynomial: "p3 - a0*a1*b0*b1 = 0", remainder: "p0 + 2*p1 + 4*p2 + 8*a0*a1*b0*b1 - (a0 + 2*a1)*(b0 + 2*b1)" },
-        { type: "slice-end", slice: 3, remainder: "p0 + 2*p1 + 4*p2 + 8*a0*a1*b0*b1 - (a0 + 2*a1)*(b0 + 2*b1)" },
-        { type: "slice-start", slice: 2 },
-        { type: "reduce", polynomial: "p2 - a1*b1 + a0*a1*b0*b1 = 0", remainder: "p0 + 2*p1 + 4*a1*b1 + 4*a0*a1*b0*b1 - (a0 + 2*a1)*(b0 + 2*b1)" },
-        { type: "slice-end", slice: 2, remainder: "p0 + 2*p1 + 4*a1*b1 + 4*a0*a1*b0*b1 - (a0 + 2*a1)*(b0 + 2*b1)" },
-        { type: "slice-start", slice: 1 },
-        { type: "reduce", polynomial: "p1 - a0*b1 - a1*b0 + 2*a0*a1*b0*b1 = 0", remainder: "p0 + 2*a0*b1 + 2*a1*b0 + 4*a1*b1 - (a0 + 2*a1)*(b0 + 2*b1)" },
-        { type: "slice-end", slice: 1, remainder: "p0 + 2*a0*b1 + 2*a1*b0 + 4*a1*b1 - (a0 + 2*a1)*(b0 + 2*b1)" },
-        { type: "slice-start", slice: 0 },
-        { type: "reduce", polynomial: "p0 - a0*b0 = 0", remainder: "a0*b0 + 2*a0*b1 + 2*a1*b0 + 4*a1*b1 - (a0 + 2*a1)*(b0 + 2*b1)" },
-        { type: "reduce", polynomial: "(a0 + 2*a1)*(b0 + 2*b1) - a0*b0 - 2*a0*b1 - 2*a1*b0 - 4*a1*b1 = 0", remainder: "0" },
-        { type: "slice-end", slice: 0, remainder: "0" }
-      ]
-    }
+    ]
   },
   {
     id: "mul3x2",
@@ -217,29 +198,7 @@ const fallbackExamples = [
           { label: "p4", expression: "p4 - a1*a2*b0*b1 + higher-order Boolean-normalized support = 0" }
         ]
       }
-    ],
-    specification: {
-      polynomial: "p0 + 2*p1 + 4*p2 + 8*p3 + 16*p4 - (a0 + 2*a1 + 4*a2)*(b0 + 2*b1) = 0",
-      result: "CORRECT MULTIPLIER",
-      steps: [
-        { type: "slice-start", slice: 4 },
-        { type: "reduce", polynomial: "p4 - a1*a2*b0*b1 + higher-order Boolean-normalized support = 0", remainder: "weight 2^4 term absorbed into the running remainder" },
-        { type: "slice-end", slice: 4, remainder: "remainder now carries only weights 2^0..2^3" },
-        { type: "slice-start", slice: 3 },
-        { type: "reduce", polynomial: "p3 - arithmetic support at weight 2^3 in a0,a1,a2,b0,b1", remainder: "weight 2^3 term absorbed into the running remainder" },
-        { type: "slice-end", slice: 3, remainder: "remainder now carries only weights 2^0..2^2" },
-        { type: "slice-start", slice: 2 },
-        { type: "reduce", polynomial: "p2 - arithmetic support at weight 2^2 in a0,a1,a2,b0,b1", remainder: "weight 2^2 term absorbed into the running remainder" },
-        { type: "slice-end", slice: 2, remainder: "remainder now carries only weights 2^0..2^1" },
-        { type: "slice-start", slice: 1 },
-        { type: "reduce", polynomial: "p1 - a1*b0 - a0*b1 + 2*a0*a1*b0*b1 = 0", remainder: "a0*b0 + 2*a1*b0 + 2*a0*b1 - (a0 + 2*a1 + 4*a2)*(b0 + 2*b1)" },
-        { type: "slice-end", slice: 1, remainder: "a0*b0 + 2*a1*b0 + 2*a0*b1 - (a0 + 2*a1 + 4*a2)*(b0 + 2*b1)" },
-        { type: "slice-start", slice: 0 },
-        { type: "reduce", polynomial: "p0 - a0*b0 = 0", remainder: "a0*b0 + 2*a1*b0 + 2*a0*b1 - (a0 + 2*a1 + 4*a2)*(b0 + 2*b1)" },
-        { type: "reduce", polynomial: "(a0 + 2*a1 + 4*a2)*(b0 + 2*b1) - a0*b0 - 2*a1*b0 - 2*a0*b1 - higher terms = 0", remainder: "0" },
-        { type: "slice-end", slice: 0, remainder: "0" }
-      ]
-    }
+    ]
   }
 ];
 
@@ -250,29 +209,14 @@ const REDUNDANT_STAGE_NAMES = new Set([
   "Identify xor support"
 ]);
 
-const STAGE_NAMES_WITHOUT_EXTRA_EQUATIONS = new Set(["Initialize slices"]);
-
-// Only stages at or after "Initialize slices" in the toolbar should group the
-// polynomial list by slice - "Remove internal xor gates" now runs *before*
-// slices exist (see the step-2/step-3 swap), so even though it carries
-// microSteps like the later reduction stages, grouping it by slice would show
-// "Slice N" headers before slices have actually been initialized.
-const GROUP_BY_SLICE_STAGE_NAMES = new Set([
-  "Initialize slices",
-  "Eliminate single-occurrence nodes",
-  "Remove gates without a slice"
-]);
-
-
 const state = {
   exampleIndex: 0,
   stageIndex: 0,
   microStepIndex: null,
   activeNodeId: null,
   zoom: null,
-  viewMode: "full",
-  sliceIndex: null,
   phase: "preprocessing",
+  // How many gates of the specification rewrite have been substituted.
   specStepIndex: 0
 };
 
@@ -286,14 +230,20 @@ const stageList = document.querySelector("#stageList");
 const polynomialList = document.querySelector("#polynomialList");
 
 const specPolynomial = document.querySelector("#specPolynomial");
-const specStepLog = document.querySelector("#specStepLog");
+const specTermCount = document.querySelector("#specTermCount");
+const specStepCaption = document.querySelector("#specStepCaption");
+const specGraphElement = document.querySelector("#specGraph");
 const specStepLabel = document.querySelector("#specStepLabel");
 const specStepBack = document.querySelector("#specStepBack");
 const specStepForward = document.querySelector("#specStepForward");
-const specSliceBack = document.querySelector("#specSliceBack");
-const specSliceForward = document.querySelector("#specSliceForward");
+const specStepBackMany = document.querySelector("#specStepBackMany");
+const specStepForwardMany = document.querySelector("#specStepForwardMany");
 const specStepRunAll = document.querySelector("#specStepRunAll");
 const specStepReset = document.querySelector("#specStepReset");
+const specZoomOut = document.querySelector("#specZoomOut");
+const specZoomIn = document.querySelector("#specZoomIn");
+const specZoomLabel = document.querySelector("#specZoomLabel");
+const specZoomFit = document.querySelector("#specZoomFit");
 
 const pipelineUndoAll = document.querySelector("#pipelineUndoAll");
 const pipelineRunAll = document.querySelector("#pipelineRunAll");
@@ -315,6 +265,7 @@ const zoomIn = document.querySelector("#zoomIn");
 const zoomReset = document.querySelector("#zoomReset");
 const zoomLabel = document.querySelector("#zoomLabel");
 const graphCard = document.querySelector(".graph-card");
+const specGraphCard = specGraphElement.closest(".graph-card");
 
 function currentExample() {
   return examples[state.exampleIndex];
@@ -332,23 +283,36 @@ function activeEdges() {
   return overlay.rootUpdates.length ? overlay.edges : currentExample().edges;
 }
 
+// The last box of the preprocessing pipeline: every elimination applied, i.e.
+// the polynomial set the specification is then rewritten with. It needs no
+// data of its own - a stage without microSteps shows the state after all
+// stages before it have fully run (computeOverlayForStage) - and, being
+// last, it is where "Run all" lands.
+const FINAL_STAGE_NAME = "Final preprocessed encoding";
+
+function finalPreprocessedStage() {
+  return {
+    name: FINAL_STAGE_NAME,
+    summary: "Every elimination applied: the final preprocessed encoding, which the specification is rewritten with.",
+    polynomials: []
+  };
+}
+
 function normalizeExample(example) {
   const stages = Array.isArray(example.stages)
     ? example.stages.filter((stage) => !REDUNDANT_STAGE_NAMES.has(stage.name))
     : [];
+  const kept = stages.length ? stages : example.stages ?? [];
+  const withFinal = kept.length && kept[kept.length - 1].name !== FINAL_STAGE_NAME ? [...kept, finalPreprocessedStage()] : kept;
 
   return {
     ...example,
-    stages: stages.length ? stages : example.stages
+    stages: withFinal
   };
 }
 
 function currentStage() {
   return currentExample().stages[state.stageIndex];
-}
-
-function currentSpecification() {
-  return currentExample().specification;
 }
 
 const VARIABLE_TOKEN_RE = /[A-Za-z][A-Za-z0-9]*/g;
@@ -381,8 +345,8 @@ function currentMicroStepLimit() {
 
 let overlayCache = { example: null, stageIndex: null, microStepLimit: null, overlay: null };
 
-// Reduction-phase stages (Remove internal xor gates / Eliminate
-// single-occurrence nodes / Remove gates without a slice) don't carry a full
+// Reduction-phase stages (Eliminate internal xor gates / Eliminate
+// single-occurrence nodes / Eliminate no clear COI nodes) don't carry a full
 // resnapshot of every gate alive at that point - with 40-150+ individual
 // eliminations per phase, that blew examples.json up to tens of megabytes
 // and stalled the page on load. Instead each stage carries its phase's
@@ -471,11 +435,16 @@ function currentOverlay() {
 // stage has run to completion - independent of wherever state.stageIndex /
 // state.microStepIndex happen to be, so the Specification rewrite tab can
 // always show the finished set rather than a mid-preprocessing snapshot.
+const finalOverlayCache = new WeakMap();
+
 function finalOverlay() {
-  const stages = currentExample().stages;
-  const lastIndex = stages.length - 1;
-  const microSteps = stages[lastIndex].microSteps ?? [];
-  return computeOverlayForStage(lastIndex, microSteps.length);
+  const example = currentExample();
+  if (!finalOverlayCache.has(example)) {
+    const lastIndex = example.stages.length - 1;
+    const microSteps = example.stages[lastIndex].microSteps ?? [];
+    finalOverlayCache.set(example, computeOverlayForStage(lastIndex, microSteps.length));
+  }
+  return finalOverlayCache.get(example);
 }
 
 // Shared, read-only - these used to be rebuilt on every call, including once
@@ -487,35 +456,6 @@ function currentStageDimmedSet() {
 
 function currentStageRootUpdatesMap() {
   return currentOverlay().rootUpdatesMap;
-}
-
-// Slices are only meaningful in the "Initialize slices" stage, and only
-// hovering the slice's own output gate (s_i) should reveal its members.
-function hoveredSliceValue() {
-  if (!state.activeNodeId || currentStage().name !== "Initialize slices") {
-    return null;
-  }
-  const node = nodeMap().get(state.activeNodeId);
-  if (!node || node.type !== "output" || typeof node.slice !== "number") {
-    return null;
-  }
-  return node.slice;
-}
-
-function currentSlices() {
-  return currentExample().slices ?? [];
-}
-
-function ensureSliceSelection() {
-  const slices = currentSlices();
-  if (!slices.length) {
-    state.sliceIndex = null;
-    return;
-  }
-
-  if (!slices.includes(state.sliceIndex)) {
-    state.sliceIndex = slices[slices.length - 1];
-  }
 }
 
 // One shared collator: localeCompare with options builds a new one on every
@@ -539,15 +479,11 @@ function formatPolynomialExpression(expression) {
   return expression.replace(/^\s*\d+\s+/, "").trim();
 }
 
-function shouldAppendStagePolynomials(stage) {
-  return !STAGE_NAMES_WITHOUT_EXTRA_EQUATIONS.has(stage.name);
-}
-
 const EXAMPLES_MANIFEST_URL = "./data/generated/examples.json";
 
 // examples.json is a manifest of {id, label, title, nodeCount, file} entries;
 // each circuit's data lives in its own file and is fetched the first time it
-// is selected, so the page doesn't download sp-ar-rc-64 (~49 MB) up front.
+// is selected, so the page doesn't download sp-ar-rc-64 (~34 MB) up front.
 // A manifest entry is replaced by the full example once it has loaded.
 function isExampleLoaded(example) {
   return Array.isArray(example?.stages);
@@ -606,30 +542,43 @@ async function selectExample(index) {
   state.activeNodeId = null;
   state.zoom = null;
   state.specStepIndex = 0;
-  ensureSliceSelection();
   render();
 }
 
+// The picker shows two rows: the assorted multiplier designs (including the
+// faulty one) first, then the correct sp-ar-rc family by size. Within a row,
+// circuits keep their order from the manifest.
+const SP_AR_RC_FAMILY_RE = /^sp-ar-rc-\d+$/;
+
+function pickerRows() {
+  const indexed = examples.map((example, index) => ({ example, index }));
+  return [
+    indexed.filter(({ example }) => !SP_AR_RC_FAMILY_RE.test(example.id ?? "")),
+    indexed.filter(({ example }) => SP_AR_RC_FAMILY_RE.test(example.id ?? ""))
+  ].filter((row) => row.length);
+}
+
 function buildExamplePicker() {
-  examplePicker.innerHTML = examples
-    .map((example, index) => {
-      const isLoading = index === pendingExampleIndex;
-      const classes = ["pill-button", index === state.exampleIndex ? "active" : "", isLoading ? "loading" : ""]
-        .filter(Boolean)
-        .join(" ");
-      const nodeCount = example.nodeCount ?? example.nodes?.length;
-      const title = nodeCount ? ` title="${nodeCount.toLocaleString("en-US")} nodes"` : "";
-      return `
-        <button
-          class="${classes}"
-          type="button"
-          data-example-index="${index}"${title}
-          ${isLoading ? 'aria-busy="true"' : ""}
-        >
-          ${escapeHtml(example.label)}${isLoading ? " &hellip;" : ""}
-        </button>
-      `;
-    })
+  const buttonMarkup = ({ example, index }) => {
+    const isLoading = index === pendingExampleIndex;
+    const classes = ["pill-button", index === state.exampleIndex ? "active" : "", isLoading ? "loading" : ""]
+      .filter(Boolean)
+      .join(" ");
+    const nodeCount = example.nodeCount ?? example.nodes?.length;
+    const title = nodeCount ? ` title="${nodeCount.toLocaleString("en-US")} nodes"` : "";
+    return `
+      <button
+        class="${classes}"
+        type="button"
+        data-example-index="${index}"${title}
+        ${isLoading ? 'aria-busy="true"' : ""}
+      >
+        ${escapeHtml(example.label)}${isLoading ? " &hellip;" : ""}
+      </button>
+    `;
+  };
+  examplePicker.innerHTML = pickerRows()
+    .map((row) => `<div class="picker-row">${row.map(buttonMarkup).join("")}</div>`)
     .join("");
 
   examplePicker.querySelectorAll("button").forEach((button) => {
@@ -675,31 +624,19 @@ function buildPhaseTabs() {
 
 let graphViewCache = null;
 
-// The visible nodes/edges for the current example, stage and view mode, plus
-// each node's parent/child edges. Hovering reads parents/children on every
-// node change, so this is computed once per state instead of filtering every
-// edge per hover (~96k edges on sp-ar-rc-64).
+// The visible nodes/edges for the current example and stage, plus each
+// node's parent/child edges. Hovering reads parents/children on every node
+// change, so this is computed once per state instead of filtering every edge
+// per hover (~96k edges on sp-ar-rc-64).
 function currentGraphView() {
   const example = currentExample();
   const overlay = currentOverlay();
-  if (state.viewMode === "slice") {
-    ensureSliceSelection();
-  }
   const cached = graphViewCache;
-  if (
-    cached &&
-    cached.example === example &&
-    cached.overlay === overlay &&
-    cached.viewMode === state.viewMode &&
-    cached.sliceIndex === state.sliceIndex
-  ) {
+  if (cached && cached.example === example && cached.overlay === overlay) {
     return cached;
   }
 
-  const nodes =
-    state.viewMode === "slice"
-      ? example.nodes.filter((node) => node.type === "input" || node.slice === state.sliceIndex)
-      : example.nodes;
+  const nodes = example.nodes;
   const ids = new Set(nodes.map((node) => node.id));
   const edges = activeEdges().filter((edge) => ids.has(edge.from) && ids.has(edge.to));
   const parents = new Map();
@@ -718,8 +655,6 @@ function currentGraphView() {
   graphViewCache = {
     example,
     overlay,
-    viewMode: state.viewMode,
-    sliceIndex: state.sliceIndex,
     ids,
     nodes,
     edges,
@@ -741,69 +676,10 @@ function visibleEdges() {
   return currentGraphView().edges;
 }
 
-function compactSliceNodes(nodes, edges) {
-  const levelById = new Map();
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const outgoing = new Map(nodes.map((node) => [node.id, []]));
-  const incomingCount = new Map(nodes.map((node) => [node.id, 0]));
-
-  edges.forEach((edge) => {
-    outgoing.get(edge.from)?.push(edge.to);
-    incomingCount.set(edge.to, (incomingCount.get(edge.to) ?? 0) + 1);
-  });
-
-  const queue = nodes
-    .filter((node) => (incomingCount.get(node.id) ?? 0) === 0)
-    .sort((left, right) => compareLabels(left.label, right.label));
-
-  queue.forEach((node) => levelById.set(node.id, 0));
-
-  for (let head = 0; head < queue.length; head += 1) {
-    const node = queue[head];
-    const level = levelById.get(node.id) ?? 0;
-    (outgoing.get(node.id) ?? []).forEach((childId) => {
-      const nextLevel = level + 1;
-      levelById.set(childId, Math.max(levelById.get(childId) ?? 0, nextLevel));
-      incomingCount.set(childId, (incomingCount.get(childId) ?? 1) - 1);
-      if ((incomingCount.get(childId) ?? 0) === 0) {
-        const childNode = nodeById.get(childId);
-        if (childNode) {
-          queue.push(childNode);
-        }
-      }
-    });
-  }
-
-  const layers = new Map();
-  nodes.forEach((node) => {
-    const level = levelById.get(node.id) ?? 0;
-    if (!layers.has(level)) {
-      layers.set(level, []);
-    }
-    layers.get(level).push(node);
-  });
-
-  const laidOut = [];
-  const sortedLevels = [...layers.keys()].sort((left, right) => left - right);
-  sortedLevels.forEach((level) => {
-    const layer = layers.get(level).sort((left, right) => compareLabels(left.label, right.label));
-    const baseX = 80;
-    const spacingX = 92;
-    const y = 70 + level * 110;
-    layer.forEach((node, index) => {
-      laidOut.push({
-        ...node,
-        x: baseX + index * spacingX,
-        y
-      });
-    });
-  });
-
-  return laidOut;
-}
-
 function renderGraphToolbar() {
-  zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
+  const label = `${Math.round(state.zoom * 100)}%`;
+  zoomLabel.textContent = label;
+  specZoomLabel.textContent = label;
 }
 
 // The two ends of the preprocessing pipeline: the untouched gate-constraint
@@ -942,8 +818,9 @@ function renderStageList() {
   });
 }
 
-function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials, options = {}) {
-  const { groupBySlice = false, decreasing = false } = options;
+// The stage's live polynomial set in decreasing label order, preceded by any
+// stage-level equations that don't belong to a single node.
+function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials) {
   const entries = [];
   const seen = new Set();
 
@@ -952,78 +829,48 @@ function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials, opti
     .sort((left, right) => compareLabels(left.label, right.label));
 
   polynomialNodes.forEach((node) => {
-    const isRewritten = rootUpdates.has(node.id);
-    const slice = typeof node.slice === "number" ? node.slice : null;
-    // A gate that absorbed an eliminated child's polynomial (e.g. during xor
-    // removal) but still has no slice is only transiently "ungrouped" - it
-    // hasn't been through slicing yet, so it's not a real standing member of
-    // the Ungrouped bucket. Drop it there instead of cluttering that group.
-    if (groupBySlice && slice === null && isRewritten) {
-      return;
-    }
-    const baseExpression = rootUpdates.get(node.id) ?? node.polynomial;
-    const expression = formatPolynomialExpression(baseExpression);
+    const expression = formatPolynomialExpression(rootUpdates.get(node.id) ?? node.polynomial);
     if (!expression) {
       return;
     }
-    const label = node.label;
-    const dedupeKey = `${label}::${expression}`;
+    const dedupeKey = `${node.label}::${expression}`;
     if (seen.has(dedupeKey)) {
       return;
     }
     seen.add(dedupeKey);
-    entries.push({ label, expression, nodeId: node.id, slice });
+    entries.push({ label: node.label, expression, nodeId: node.id });
   });
 
-  // Keep stage-level equations like spec/goals visible when they do not map to a node equation.
   extraPolynomials.forEach((entry) => {
-    const formattedExpression = formatPolynomialExpression(entry.expression);
-    const dedupeKey = `${entry.label}::${formattedExpression}`;
+    const expression = formatPolynomialExpression(entry.expression);
+    const dedupeKey = `${entry.label}::${expression}`;
     if (seen.has(dedupeKey)) {
       return;
     }
     seen.add(dedupeKey);
-    entries.push({ label: entry.label, expression: formattedExpression, nodeId: null, slice: null });
+    entries.push({ label: entry.label, expression, nodeId: null });
   });
 
-  if (groupBySlice) {
-    // Decreasing slice order, matching the order the reduce step later
-    // consumes them in (most-significant slice first); ungrouped nodes last.
-    // Within a slice, gates are also listed in decreasing label order.
-    entries.sort((left, right) => {
-      const leftSlice = left.slice ?? -Infinity;
-      const rightSlice = right.slice ?? -Infinity;
-      if (leftSlice !== rightSlice) {
-        return rightSlice - leftSlice;
-      }
-      return compareLabels(right.label, left.label);
-    });
-  } else if (decreasing) {
-    entries.reverse();
-  }
-
-  return entries;
+  return entries.reverse();
 }
 
-function renderPolynomialEntries(title, entries, options = {}) {
-  const { showSliceGroups = false } = options;
+// `entry.step`, when present, is the specification-rewrite step that
+// substitutes this polynomial (Specification rewrite tab only).
+function renderPolynomialEntries(title, entries) {
   polynomialTitle.textContent = title;
   polynomialCount.textContent = `${entries.length} eqs`;
 
-  const rows = [];
-  let previousSlice;
-  entries.forEach((entry) => {
-    if (showSliceGroups && entry.slice !== previousSlice) {
-      previousSlice = entry.slice;
-      const heading = entry.slice === null ? "Ungrouped" : `Slice ${entry.slice}`;
-      rows.push(`<p class="poly-slice-header">${escapeHtml(heading)}</p>`);
-    }
-    rows.push(`
-      <article class="poly-item compact-line"${entry.nodeId ? ` data-poly-node-id="${entry.nodeId}" tabindex="0" role="button" aria-label="highlight ${escapeHtml(entry.label)}"` : ""}>
+  const rows = entries.map((entry) => {
+    const nodeAttributes = entry.nodeId
+      ? ` data-poly-node-id="${escapeHtml(entry.nodeId)}" tabindex="0" role="button" aria-label="highlight ${escapeHtml(entry.label)}"`
+      : "";
+    const stepAttribute = entry.step ? ` data-spec-step="${entry.step}"` : "";
+    return `
+      <article class="poly-item compact-line"${nodeAttributes}${stepAttribute}>
         <h4>${escapeHtml(entry.label)}</h4>
         <p>${escapeHtml(entry.expression)}</p>
       </article>
-    `);
+    `;
   });
 
   polynomialList.innerHTML = rows.join("");
@@ -1036,32 +883,8 @@ function renderPolynomialEntries(title, entries, options = {}) {
 
 function renderPolynomialList() {
   const stage = currentStage();
-  const dimmedNodes = currentStageDimmedSet();
-  const rootUpdates = currentStageRootUpdatesMap();
-  const extraPolynomials = shouldAppendStagePolynomials(stage) ? stage.polynomials : [];
-  // Reduction-phase stages after slicing (single-occurrence elimination /
-  // decomposition / unassigned-gate removal) whittle the same slice-grouped
-  // set down node by node, so keep the slice grouping visible there too -
-  // but not for "Remove internal xor gates", which now runs before slices
-  // exist.
-  const groupBySlice = GROUP_BY_SLICE_STAGE_NAMES.has(stage.name);
-  // Descending order applies everywhere: within slice groups when grouped,
-  // or as a flat reversed list on stages before slices exist (currently just
-  // "Extract gate constraints" and "Remove internal xor gates").
-  const decreasing = !groupBySlice;
-  const entries = buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials, { groupBySlice, decreasing });
-  renderPolynomialEntries(`${stage.name} active set`, entries, { showSliceGroups: groupBySlice });
-}
-
-// Used by the Specification rewrite tab: always the complete, fully-applied
-// preprocessed polynomial set for the selected multiplier, regardless of
-// which preprocessing stage/microstep was last active.
-function renderFinalPolynomialList() {
-  const overlay = finalOverlay();
-  const dimmedNodes = new Set(overlay.dimmedNodes);
-  const rootUpdates = new Map(overlay.rootUpdates.map((update) => [update.nodeId, update.expression]));
-  const entries = buildPolynomialEntries(dimmedNodes, rootUpdates, [], { groupBySlice: true });
-  renderPolynomialEntries("Complete preprocessed set", entries, { showSliceGroups: true });
+  const entries = buildPolynomialEntries(currentStageDimmedSet(), currentStageRootUpdatesMap(), stage.polynomials ?? []);
+  renderPolynomialEntries(`${stage.name} active set`, entries);
 }
 
 // Row elements of the rendered polynomial list by node id, and which one
@@ -1110,8 +933,12 @@ polynomialList.addEventListener("focusout", (event) => {
 });
 polynomialList.addEventListener("click", (event) => {
   const row = polynomialRowOf(event.target);
-  if (row) {
-    setActiveNode(row.dataset.polyNodeId);
+  if (!row) {
+    return;
+  }
+  setActiveNode(row.dataset.polyNodeId);
+  if (state.phase === "specification" && row.dataset.specStep) {
+    setSpecStep(Number(row.dataset.specStep));
   }
 });
 polynomialList.addEventListener("keydown", (event) => {
@@ -1191,39 +1018,27 @@ function renderHeader() {
   exampleDescription.textContent = example.description;
 }
 
-function edgeClassNames(edge, map, sliceValue) {
+function edgeClassNames(edge) {
   const classes = ["graph-edge"];
   if (edge.inverted) {
     classes.push("inverted");
   }
-  const isActive = state.activeNodeId && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
-  const isSliceMember =
-    sliceValue !== null && map.get(edge.from)?.slice === sliceValue && map.get(edge.to)?.slice === sliceValue;
-  if (isActive) {
+  if (state.activeNodeId && (edge.from === state.activeNodeId || edge.to === state.activeNodeId)) {
     classes.push("active");
-  } else if (isSliceMember) {
-    classes.push("slice-focus");
-  } else if (sliceValue !== null) {
-    classes.push("slice-dim");
   }
   return classes.join(" ");
 }
 
-function nodeMarkup(node, sliceValue, dimmedNodes, rootUpdates, showLabels) {
+function nodeMarkup(node, dimmedNodes, rootUpdates, showLabels) {
   const isActive = node.id === state.activeNodeId;
   const isDimmed = dimmedNodes.has(node.id);
   const isRootUpdated = rootUpdates.has(node.id);
-  const isSliceMember = sliceValue !== null && node.slice === sliceValue;
-  const isSliceFocus = isSliceMember && !isActive;
-  const isSliceDim = sliceValue !== null && !isSliceMember && !isActive;
   const classes = [
     "graph-node",
     node.type,
     isActive ? "active" : "",
     isDimmed ? "dimmed" : "",
-    isRootUpdated ? "root-updated" : "",
-    isSliceFocus ? "slice-focus" : "",
-    isSliceDim ? "slice-dim" : ""
+    isRootUpdated ? "root-updated" : ""
   ]
     .filter(Boolean)
     .join(" ");
@@ -1270,7 +1085,7 @@ function graphNodeOf(target) {
 
 graphElement.addEventListener("mouseover", (event) => {
   const element = graphNodeOf(event.target);
-  if (element) {
+  if (element && !isPanning()) {
     setActiveNode(element.dataset.nodeId);
   }
 });
@@ -1298,8 +1113,8 @@ graphElement.addEventListener("mouseleave", () => {
   setActiveNode(null);
 });
 
-function edgePath(edge, map, useStoredPoints = true) {
-  if (useStoredPoints && edge.points?.length) {
+function edgePath(edge, map) {
+  if (edge.points?.length) {
     return edge.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point[0]} ${point[1]}`).join(" ");
   }
 
@@ -1341,25 +1156,25 @@ function visibleGraphBounds(nodes, edges) {
   };
 }
 
-function currentGraphSize() {
+// The coordinate box a graph is drawn in: the generated layout's own size, or
+// (hand-made toy examples) the bounds of what is drawn.
+function graphViewBox(nodes, edges) {
   const example = currentExample();
-  const edges = visibleEdges();
-  const useStoredPoints = state.viewMode === "full";
-  const baseNodes = visibleNodes();
-  const nodes = useStoredPoints ? baseNodes : compactSliceNodes(baseNodes, edges);
-
-  if (useStoredPoints && example.graphWidth && example.graphHeight) {
-    return {
-      width: example.graphWidth,
-      height: example.graphHeight
-    };
+  if (example.graphWidth && example.graphHeight) {
+    return { minX: 0, minY: 0, width: example.graphWidth, height: example.graphHeight };
   }
+  return visibleGraphBounds(nodes, edges);
+}
 
-  const bounds = visibleGraphBounds(nodes, edges);
-  return {
-    width: bounds.width,
-    height: bounds.height
-  };
+function currentGraphSize() {
+  const box = graphViewBox(visibleNodes(), visibleEdges());
+  return { width: box.width, height: box.height };
+}
+
+function sizeGraphElement(element, box) {
+  element.setAttribute("viewBox", `${box.minX} ${box.minY} ${box.width} ${box.height}`);
+  element.style.width = `${box.width * state.zoom}px`;
+  element.style.height = `${box.height * state.zoom}px`;
 }
 
 // Above this many visible nodes, node labels are only drawn from
@@ -1372,17 +1187,26 @@ const LABEL_MIN_ZOOM = 0.5;
 
 function fitZoom() {
   const graphSize = currentGraphSize();
-  const availableWidth = Math.max(260, graphCard.clientWidth - 24);
-  const availableHeight = Math.max(220, graphCard.clientHeight - 24);
+  // Both tabs draw the same layout; measure whichever card is on screen.
+  const card = state.phase === "specification" ? specGraphCard : graphCard;
+  const availableWidth = Math.max(260, card.clientWidth - 24);
+  const availableHeight = Math.max(220, card.clientHeight - 24);
   return Math.min(availableWidth / graphSize.width, availableHeight / graphSize.height, 1) * 0.98;
 }
+
+// A circuit always opens zoomed to fit its whole graph in the card, however
+// small that makes it (sp-ar-rc-64 opens at about 3%). Both tabs share the
+// zoom, since they draw the same layout.
+const MIN_ZOOM = 0.005;
+const MAX_ZOOM = 2.5;
+const ZOOM_STEP = 1.25;
 
 function ensureZoomInitialized() {
   if (typeof state.zoom === "number") {
     return;
   }
 
-  state.zoom = Math.max(0.2, fitZoom());
+  state.zoom = Math.max(MIN_ZOOM, fitZoom());
 }
 
 // The rendered graph's elements, indexed so a hover can restyle just the
@@ -1393,51 +1217,44 @@ let graphDom = {
   edgeElements: [],
   edgeIndexesByNode: new Map(),
   edges: [],
-  highlightedNodeId: null,
-  sliceValue: null
+  highlightedNodeId: null
 };
+
+// Marker ids are document-global, so each graph gets its own.
+function inversionMarkerDefs(id) {
+  return `
+    <defs>
+      <marker id="${id}" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+        <circle cx="6" cy="6" r="4.2" fill="var(--surface-strong)" stroke="var(--ink)" stroke-width="1.4"></circle>
+      </marker>
+    </defs>
+  `;
+}
+
+function edgeLayerMarkup(edges, map, markerId) {
+  return edges
+    .map((edge, index) => {
+      const marker = edge.inverted ? ` marker-end="url(#${markerId})"` : "";
+      return `<path class="${edgeClassNames(edge)}" data-edge-index="${index}" d="${edgePath(edge, map)}"${marker}></path>`;
+    })
+    .join("");
+}
 
 function renderGraph() {
   const example = currentExample();
-  const baseNodes = visibleNodes();
+  const nodes = visibleNodes();
   const edges = visibleEdges();
-  const useStoredPoints = state.viewMode === "full";
-  const nodes = useStoredPoints ? baseNodes : compactSliceNodes(baseNodes, edges);
   const map = new Map(nodes.map((node) => [node.id, node]));
-
-  if (useStoredPoints && example.graphWidth && example.graphHeight) {
-    graphElement.setAttribute("viewBox", `0 0 ${example.graphWidth} ${example.graphHeight}`);
-    graphElement.style.width = `${example.graphWidth * state.zoom}px`;
-    graphElement.style.height = `${example.graphHeight * state.zoom}px`;
-  } else {
-    const bounds = visibleGraphBounds(nodes, edges);
-    graphElement.setAttribute("viewBox", `${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`);
-    graphElement.style.width = `${bounds.width * state.zoom}px`;
-    graphElement.style.height = `${bounds.height * state.zoom}px`;
-  }
-
-  const sliceValue = hoveredSliceValue();
-
-  const edgeMarkup = edges
-    .map((edge, index) => {
-      const path = edgePath(edge, map, useStoredPoints);
-      const marker = edge.inverted ? " marker-end=\"url(#inversionBubble)\"" : "";
-      return `<path class="${edgeClassNames(edge, map, sliceValue)}" data-edge-index="${index}" d="${path}"${marker}></path>`;
-    })
-    .join("");
+  sizeGraphElement(graphElement, graphViewBox(nodes, edges));
 
   const dimmedNodes = currentStageDimmedSet();
   const rootUpdates = currentStageRootUpdatesMap();
   const showLabels = nodes.length <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
-  const nodeLayer = nodes.map((node) => nodeMarkup(node, sliceValue, dimmedNodes, rootUpdates, showLabels)).join("");
+  const nodeLayer = nodes.map((node) => nodeMarkup(node, dimmedNodes, rootUpdates, showLabels)).join("");
 
   graphElement.innerHTML = `
-    <defs>
-      <marker id="inversionBubble" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto" markerUnits="userSpaceOnUse">
-        <circle cx="6" cy="6" r="4.2" fill="var(--surface-strong)" stroke="var(--ink)" stroke-width="1.4"></circle>
-      </marker>
-    </defs>
-    <g class="edge-layer">${edgeMarkup}</g>
+    ${inversionMarkerDefs("inversionBubble")}
+    <g class="edge-layer">${edgeLayerMarkup(edges, map, "inversionBubble")}</g>
     <g class="node-layer">${nodeLayer}</g>
   `;
 
@@ -1461,63 +1278,35 @@ function renderGraph() {
     edgeElements: [...graphElement.querySelectorAll("[data-edge-index]")],
     edgeIndexesByNode,
     edges,
-    highlightedNodeId: state.activeNodeId,
-    sliceValue
+    highlightedNodeId: state.activeNodeId
   };
-
-  if (state.viewMode === "slice") {
-    graphCard.scrollTop = 0;
-    graphCard.scrollLeft = 0;
-  }
+  updatePannable(graphCard);
 }
 
-function styleGraphNodeElement(element, nodeId, map, sliceValue) {
-  const isActive = nodeId === state.activeNodeId;
-  const isSliceMember = sliceValue !== null && map.get(nodeId)?.slice === sliceValue;
-  element.classList.toggle("active", isActive);
-  element.classList.toggle("slice-focus", isSliceMember && !isActive);
-  element.classList.toggle("slice-dim", sliceValue !== null && !isSliceMember && !isActive);
-}
-
-function styleGraphEdgeElement(element, edge, map, sliceValue) {
-  const isActive = state.activeNodeId && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
-  const isSliceMember =
-    sliceValue !== null && map.get(edge.from)?.slice === sliceValue && map.get(edge.to)?.slice === sliceValue;
-  element.classList.toggle("active", Boolean(isActive));
-  element.classList.toggle("slice-focus", Boolean(!isActive && isSliceMember));
-  element.classList.toggle("slice-dim", Boolean(!isActive && sliceValue !== null && !isSliceMember));
-}
-
-// Only restyles what changed. A plain hover changes the highlight of two
-// nodes and their edges, so only those are touched (it used to restyle every
-// node and look each edge up with its own querySelector - quadratic in the
-// edge count). Hovering into or out of an output in the "Initialize slices"
-// stage changes the slice focus of the whole graph, so that case still
-// restyles everything.
+// Only restyles what changed: a hover changes the highlight of two nodes and
+// their edges, so only those are touched (it used to restyle every node and
+// look each edge up with its own querySelector - quadratic in the edge
+// count).
 function updateGraphHighlight() {
-  const map = nodeMap();
-  const sliceValue = hoveredSliceValue();
-
-  if (graphDom.example === currentExample()) {
-    const restyleNode = (nodeId) => {
-      const element = nodeId === null ? null : graphDom.nodeElements.get(nodeId);
-      if (element) {
-        styleGraphNodeElement(element, nodeId, map, sliceValue);
+  if (graphDom.example === currentExample() && graphDom.highlightedNodeId !== state.activeNodeId) {
+    [graphDom.highlightedNodeId, state.activeNodeId].forEach((nodeId) => {
+      if (nodeId === null) {
+        return;
       }
+      graphDom.nodeElements.get(nodeId)?.classList.toggle("active", nodeId === state.activeNodeId);
       (graphDom.edgeIndexesByNode.get(nodeId) ?? []).forEach((index) => {
-        styleGraphEdgeElement(graphDom.edgeElements[index], graphDom.edges[index], map, sliceValue);
+        const edge = graphDom.edges[index];
+        const isActive = state.activeNodeId !== null && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
+        graphDom.edgeElements[index].classList.toggle("active", isActive);
       });
-    };
-
-    if (sliceValue !== graphDom.sliceValue) {
-      graphDom.nodeElements.forEach((element, nodeId) => styleGraphNodeElement(element, nodeId, map, sliceValue));
-      graphDom.edges.forEach((edge, index) => styleGraphEdgeElement(graphDom.edgeElements[index], edge, map, sliceValue));
-    } else if (graphDom.highlightedNodeId !== state.activeNodeId) {
-      restyleNode(graphDom.highlightedNodeId);
-      restyleNode(state.activeNodeId);
-    }
+    });
     graphDom.highlightedNodeId = state.activeNodeId;
-    graphDom.sliceValue = sliceValue;
+  }
+
+  if (specGraphDom && specGraphDom.example === currentExample() && specGraphDom.hoveredNodeId !== state.activeNodeId) {
+    specGraphDom.nodeElements.get(specGraphDom.hoveredNodeId)?.classList.remove("active");
+    specGraphDom.nodeElements.get(state.activeNodeId)?.classList.add("active");
+    specGraphDom.hoveredNodeId = state.activeNodeId;
   }
 
   if (polyDom.highlightedNodeId !== state.activeNodeId) {
@@ -1531,130 +1320,520 @@ function updateGraphHighlight() {
   }
 }
 
-function renderSpecStepEntry(step) {
-  if (step.type === "slice-start") {
-    const header = `<div class="spec-log-entry spec-log-slice-header">Reducing by slice ${step.slice}</div>`;
+// ---------------------------------------------------------------------------
+// Specification rewrite
+//
+// The specification polynomial is rewritten gate by gate, from the outputs
+// down, until nothing but 0 is left (for a correct multiplier). Each entry of
+// `specification.steps` names the gate it substitutes, the gate polynomial
+// used and the change (`delta`) that substitution makes to the whole
+// polynomial; the polynomial after k steps is the initial one plus the first
+// k deltas. Coefficients reach 2^127 on sp-ar-rc-64, hence BigInt.
+// ---------------------------------------------------------------------------
 
-    if (!step.localSpecification) {
-      return header;
-    }
+const POLYNOMIAL_TERM_RE = /([+-]?)([^+-]+)/g;
 
-    // AMulet builds this slice's share of the specification (the weighted
-    // output bit, plus the partial products that must cancel against it)
-    // before reducing it node-by-node with the gate constraints below -
-    // surface that split explicitly instead of only showing the result.
-    const outputRow = step.outputTerm
-      ? `<p class="spec-log-split-row"><span class="spec-log-split-label">output gate</span>${escapeHtml(formatPolynomialExpression(step.outputTerm))}</p>`
-      : "";
-    const partialProductsRow = step.partialProducts
-      ? `<p class="spec-log-split-row"><span class="spec-log-split-label">partial products</span>${escapeHtml(formatPolynomialExpression(step.partialProducts))}</p>`
-      : "";
-
-    return `
-      ${header}
-      <div class="spec-log-entry spec-log-split">
-        <p class="spec-log-split-title">Split specification for slice ${step.slice}</p>
-        ${outputRow}
-        ${partialProductsRow}
-        <p class="spec-log-remainder">local specification = ${escapeHtml(formatPolynomialExpression(step.localSpecification))}</p>
-      </div>
-    `;
+function addSpecTerm(terms, key, value) {
+  const next = (terms.get(key) ?? 0n) + value;
+  if (next === 0n) {
+    terms.delete(key);
+  } else {
+    terms.set(key, next);
   }
-
-  if (step.type === "slice-end") {
-    return `
-      <div class="spec-log-entry spec-log-slice-footer">
-        <p>After reducing by slice ${step.slice}</p>
-        <p class="spec-log-remainder">remainder = ${escapeHtml(formatPolynomialExpression(step.remainder))}</p>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="spec-log-entry spec-log-step">
-      <p class="spec-log-divisor">reducing by ${escapeHtml(formatPolynomialExpression(step.polynomial))}</p>
-      <p class="spec-log-remainder">remainder = ${escapeHtml(formatPolynomialExpression(step.remainder))}</p>
-    </div>
-  `;
 }
 
-// "slice-start"/"slice-end" entries are bookkeeping, not actual polynomial
-// rewrites - only "reduce" steps substitute a gate's polynomial into the
-// remainder, so only those should count towards the step label. This count
-// matches the number of polynomials in the Complete preprocessed set: every
-// gate alive at the end of preprocessing is substituted in exactly once.
-function countRewriteSteps(steps) {
-  return steps.reduce((count, step) => count + (step.type === "reduce" ? 1 : 0), 0);
+// {monomial: coefficient}, each monomial a "*"-joined variable list in
+// decreasing variable order ("" for the constant). Variables are Boolean
+// (x*x = x), so repeated factors collapse.
+function parseSpecPolynomial(text, model) {
+  const terms = new Map();
+  const body = String(text).trim().replace(/;$/, "").replace(/\s+/g, "");
+  if (!body || body === "0") {
+    return terms;
+  }
+  for (const [, sign, term] of body.matchAll(POLYNOMIAL_TERM_RE)) {
+    let coefficient = 1n;
+    const variables = new Set();
+    term.split("*").forEach((factor) => {
+      if (/^\d+$/.test(factor)) {
+        coefficient *= BigInt(factor);
+      } else {
+        variables.add(factor);
+      }
+    });
+    const key = [...variables].sort((left, right) => model.rankOf(right) - model.rankOf(left) || compareLabels(left, right)).join("*");
+    addSpecTerm(terms, key, sign === "-" ? -coefficient : coefficient);
+  }
+  return terms;
+}
+
+// AMulet's term order: outputs above gates above inputs, each by index;
+// monomials compared variable by variable, longer first on a tie, the
+// constant last.
+function formatSpecPolynomial(terms, model) {
+  if (!terms.size) {
+    return "0";
+  }
+  const keys = [...terms.keys()].sort((left, right) => {
+    const leftRanks = model.ranksOf(left);
+    const rightRanks = model.ranksOf(right);
+    const shared = Math.min(leftRanks.length, rightRanks.length);
+    for (let index = 0; index < shared; index += 1) {
+      if (leftRanks[index] !== rightRanks[index]) {
+        return rightRanks[index] - leftRanks[index];
+      }
+    }
+    return rightRanks.length - leftRanks.length;
+  });
+  return keys
+    .map((key, index) => {
+      const coefficient = terms.get(key);
+      const negative = coefficient < 0n;
+      const magnitude = negative ? -coefficient : coefficient;
+      const body = key === "" ? magnitude.toString() : magnitude === 1n ? key : `${magnitude}*${key}`;
+      if (index === 0) {
+        return negative ? `-${body}` : body;
+      }
+      return negative ? ` - ${body}` : ` + ${body}`;
+    })
+    .join("");
+}
+
+const specModelCache = new WeakMap();
+
+// Null when the example has no gate-by-gate rewrite data (the built-in toy
+// examples).
+function specModel() {
+  const example = currentExample();
+  if (specModelCache.has(example)) {
+    return specModelCache.get(example);
+  }
+  const spec = example.specification;
+  let model = null;
+  if (spec && Array.isArray(spec.steps) && spec.steps.every((step) => typeof step.delta === "string")) {
+    const inputIndex = new Map(example.nodes.filter((node) => node.type === "input").map((node, index) => [node.id, index]));
+    const rankOf = (name) => {
+      const output = /^s(\d+)$/.exec(name);
+      if (output) {
+        return 3e9 + Number(output[1]);
+      }
+      const gate = /^l(\d+)$/.exec(name);
+      if (gate) {
+        return 1e9 + Number(gate[1]);
+      }
+      return inputIndex.get(name) ?? -1;
+    };
+    const keyRanks = new Map();
+    model = {
+      spec,
+      rankOf,
+      ranksOf(key) {
+        if (!keyRanks.has(key)) {
+          keyRanks.set(key, key === "" ? [] : key.split("*").map(rankOf));
+        }
+        return keyRanks.get(key);
+      },
+      deltas: new Array(spec.steps.length),
+      stepOfGate: new Map(spec.steps.map((step, index) => [step.gate, index + 1])),
+      cursor: null
+    };
+    model.cursor = { index: 0, terms: parseSpecPolynomial(spec.polynomial, model) };
+  }
+  specModelCache.set(example, model);
+  return model;
+}
+
+function specDelta(model, step) {
+  model.deltas[step - 1] ??= parseSpecPolynomial(model.spec.steps[step - 1].delta, model);
+  return model.deltas[step - 1];
+}
+
+// The polynomial after `step` substitutions. Walks from wherever it was last
+// (or from the start, when that is closer), so stepping costs one delta.
+function specTermsAt(model, step) {
+  const cursor = model.cursor;
+  if (step < cursor.index && step < cursor.index - step) {
+    cursor.index = 0;
+    cursor.terms = parseSpecPolynomial(model.spec.polynomial, model);
+  }
+  while (cursor.index < step) {
+    cursor.index += 1;
+    specDelta(model, cursor.index).forEach((value, key) => addSpecTerm(cursor.terms, key, value));
+  }
+  while (cursor.index > step) {
+    specDelta(model, cursor.index).forEach((value, key) => addSpecTerm(cursor.terms, key, -value));
+    cursor.index -= 1;
+  }
+  return cursor.terms;
+}
+
+function specCutVariables(terms) {
+  const variables = new Set();
+  terms.forEach((_, key) => {
+    if (key) {
+      key.split("*").forEach((variable) => variables.add(variable));
+    }
+  });
+  return variables;
+}
+
+// The cut line. The x axis is split into narrow bins; in each one the line
+// runs just above the highest gate not substituted yet, but always below
+// every gate that already is. Once a column is done it drops to just above
+// the inputs; columns with no gates at all interpolate between their
+// neighbours. So it starts above the outputs, moves down past each gate as
+// it is substituted, and ends flat above the inputs.
+const CUT_BIN_WIDTH = 20;
+const CUT_GAP = 10;
+
+function prepareSpecCut(nodes) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let maxBottom = -Infinity;
+  let inputTop = Infinity;
+  nodes.forEach((node) => {
+    const halfWidth = (node.width ?? 48) / 2;
+    const halfHeight = (node.height ?? 36) / 2;
+    minX = Math.min(minX, node.x - halfWidth);
+    maxX = Math.max(maxX, node.x + halfWidth);
+    maxBottom = Math.max(maxBottom, node.y + halfHeight);
+    if (node.type === "input") {
+      inputTop = Math.min(inputTop, node.y - halfHeight);
+    }
+  });
+  minX -= CUT_GAP;
+  maxX += CUT_GAP;
+  const binOf = (x) => Math.floor((x - minX) / CUT_BIN_WIDTH);
+  const gates = nodes
+    .filter((node) => node.type !== "input")
+    .map((node) => {
+      const halfWidth = (node.width ?? 48) / 2;
+      const halfHeight = (node.height ?? 36) / 2;
+      return {
+        id: node.id,
+        firstBin: binOf(node.x - halfWidth),
+        lastBin: binOf(node.x + halfWidth),
+        top: node.y - halfHeight,
+        bottom: node.y + halfHeight
+      };
+    });
+  return {
+    minX,
+    binCount: binOf(maxX) + 1,
+    floor: Number.isFinite(inputTop) ? inputTop - CUT_GAP : maxBottom + CUT_GAP,
+    gates
+  };
+}
+
+function specCutPath(cut, isSubstituted) {
+  const lowestDone = new Array(cut.binCount).fill(-Infinity);
+  const highestOpen = new Array(cut.binCount).fill(Infinity);
+  cut.gates.forEach((gate) => {
+    const done = isSubstituted(gate.id);
+    for (let bin = gate.firstBin; bin <= gate.lastBin; bin += 1) {
+      if (done) {
+        lowestDone[bin] = Math.max(lowestDone[bin], gate.bottom);
+      } else {
+        highestOpen[bin] = Math.min(highestOpen[bin], gate.top);
+      }
+    }
+  });
+
+  const ys = new Array(cut.binCount).fill(null);
+  for (let bin = 0; bin < cut.binCount; bin += 1) {
+    if (Number.isFinite(highestOpen[bin])) {
+      ys[bin] = highestOpen[bin] - CUT_GAP;
+      if (Number.isFinite(lowestDone[bin])) {
+        ys[bin] = Math.max(ys[bin], lowestDone[bin] + CUT_GAP);
+      }
+    } else if (Number.isFinite(lowestDone[bin])) {
+      ys[bin] = Math.max(cut.floor, lowestDone[bin] + CUT_GAP);
+    }
+  }
+  const defined = [];
+  ys.forEach((y, bin) => {
+    if (y !== null) {
+      defined.push(bin);
+    }
+  });
+  if (!defined.length) {
+    return "";
+  }
+  let next = 0;
+  for (let bin = 0; bin < cut.binCount; bin += 1) {
+    if (ys[bin] !== null) {
+      continue;
+    }
+    while (next < defined.length && defined[next] < bin) {
+      next += 1;
+    }
+    const left = next > 0 ? defined[next - 1] : null;
+    const right = next < defined.length ? defined[next] : null;
+    if (left === null) {
+      ys[bin] = ys[right];
+    } else if (right === null) {
+      ys[bin] = ys[left];
+    } else {
+      ys[bin] = ys[left] + ((ys[right] - ys[left]) * (bin - left)) / (right - left);
+    }
+  }
+
+  const round = (value) => Math.round(value * 10) / 10;
+  let path = `M ${round(cut.minX)} ${round(ys[0])}`;
+  for (let bin = 0; bin < cut.binCount; bin += 1) {
+    path += ` H ${round(cut.minX + (bin + 1) * CUT_BIN_WIDTH)}`;
+    if (bin + 1 < cut.binCount && ys[bin + 1] !== ys[bin]) {
+      path += ` V ${round(ys[bin + 1])}`;
+    }
+  }
+  return path;
+}
+
+// The circuit as preprocessing left it (eliminated gates hidden), drawn once
+// per example and zoom; stepping only restyles the nodes that change and
+// redraws the cut.
+let specGraphDom = null;
+
+function buildSpecGraph(model) {
+  const example = currentExample();
+  const overlay = finalOverlay();
+  const nodes = example.nodes.filter((node) => !overlay.dimmedSet.has(node.id));
+  const ids = new Set(nodes.map((node) => node.id));
+  const edges = (overlay.rootUpdates.length ? overlay.edges : example.edges).filter(
+    (edge) => ids.has(edge.from) && ids.has(edge.to)
+  );
+  const map = new Map(nodes.map((node) => [node.id, node]));
+  const box = graphViewBox(nodes, edges);
+  sizeGraphElement(specGraphElement, box);
+
+  const showLabels = nodes.length <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
+  const noneDimmed = new Set();
+  const noneRewritten = new Map();
+  specGraphElement.innerHTML = `
+    ${inversionMarkerDefs("specInversionBubble")}
+    <g class="edge-layer">${edgeLayerMarkup(edges, map, "specInversionBubble")}</g>
+    <path class="spec-cut" d=""></path>
+    <g class="node-layer">${nodes.map((node) => nodeMarkup(node, noneDimmed, noneRewritten, showLabels)).join("")}</g>
+  `;
+
+  const nodeElements = new Map();
+  specGraphElement.querySelectorAll("[data-node-id]").forEach((element) => {
+    nodeElements.set(element.dataset.nodeId, element);
+  });
+  const edgeElements = [...specGraphElement.querySelectorAll("[data-edge-index]")];
+  const edgeIndexesByFrom = new Map();
+  edges.forEach((edge, index) => {
+    if (!edgeIndexesByFrom.has(edge.from)) {
+      edgeIndexesByFrom.set(edge.from, []);
+    }
+    edgeIndexesByFrom.get(edge.from).push(index);
+  });
+
+  specGraphDom = {
+    example,
+    model,
+    zoom: state.zoom,
+    box,
+    map,
+    nodeElements,
+    edgeElements,
+    edgeIndexesByFrom,
+    cutPath: specGraphElement.querySelector(".spec-cut"),
+    cut: prepareSpecCut(nodes),
+    shownStep: 0,
+    currentGate: null,
+    cutVariables: new Set(),
+    hoveredNodeId: state.activeNodeId
+  };
+  updatePannable(specGraphCard);
+}
+
+function updateSpecGraph(model, step, terms) {
+  const dom = specGraphDom;
+  const steps = model.spec.steps;
+
+  // Substituted gates (and the edges into their children) fade.
+  const low = Math.min(dom.shownStep, step);
+  const high = Math.max(dom.shownStep, step);
+  for (let index = low; index < high; index += 1) {
+    const gate = steps[index].gate;
+    const substituted = index < step;
+    dom.nodeElements.get(gate)?.classList.toggle("spec-rewritten", substituted);
+    (dom.edgeIndexesByFrom.get(gate) ?? []).forEach((edgeIndex) => {
+      dom.edgeElements[edgeIndex].classList.toggle("spec-rewritten", substituted);
+    });
+  }
+
+  const currentGate = step > 0 ? steps[step - 1].gate : null;
+  if (dom.currentGate !== currentGate) {
+    dom.nodeElements.get(dom.currentGate)?.classList.remove("spec-current");
+    dom.nodeElements.get(currentGate)?.classList.add("spec-current");
+    dom.currentGate = currentGate;
+  }
+
+  // The variables the polynomial is currently written in.
+  const cutVariables = specCutVariables(terms);
+  dom.cutVariables.forEach((id) => {
+    if (!cutVariables.has(id)) {
+      dom.nodeElements.get(id)?.classList.remove("spec-in-cut");
+    }
+  });
+  cutVariables.forEach((id) => {
+    if (!dom.cutVariables.has(id)) {
+      dom.nodeElements.get(id)?.classList.add("spec-in-cut");
+    }
+  });
+  dom.cutVariables = cutVariables;
+  dom.shownStep = step;
+
+  dom.cutPath.setAttribute("d", specCutPath(dom.cut, (id) => (model.stepOfGate.get(id) ?? Infinity) <= step));
+  scrollSpecGraphTo(dom.map.get(currentGate));
+}
+
+// Keep the gate just substituted on screen when stepping through a graph
+// larger than its card.
+function scrollSpecGraphTo(node) {
+  if (!node) {
+    return;
+  }
+  const margin = 60;
+  const x = (node.x - specGraphDom.box.minX) * state.zoom;
+  const y = (node.y - specGraphDom.box.minY) * state.zoom;
+  if (x < specGraphCard.scrollLeft + margin || x > specGraphCard.scrollLeft + specGraphCard.clientWidth - margin) {
+    specGraphCard.scrollLeft = Math.max(0, x - specGraphCard.clientWidth / 2);
+  }
+  if (y < specGraphCard.scrollTop + margin || y > specGraphCard.scrollTop + specGraphCard.clientHeight - margin) {
+    specGraphCard.scrollTop = Math.max(0, y - specGraphCard.clientHeight / 2);
+  }
+}
+
+// The left panel on the Specification rewrite tab: the preprocessed
+// polynomials in the order they are substituted. Rows already used fade,
+// the one just used is marked, and clicking a row jumps to its step.
+let specRowsDom = { rows: [], shownStep: 0, currentRow: null };
+
+function renderSpecPolynomialList() {
+  const model = specModel();
+  if (!model) {
+    renderPolynomialEntries("Rewrite order", []);
+    specRowsDom = { rows: [], shownStep: 0, currentRow: null };
+    return;
+  }
+  const map = nodeMap();
+  const entries = model.spec.steps.map((step, index) => ({
+    label: map.get(step.gate)?.label ?? step.gate,
+    expression: formatPolynomialExpression(step.polynomial),
+    nodeId: step.gate,
+    step: index + 1
+  }));
+  // Gates that survive preprocessing but are never substituted, e.g. the one
+  // the fault in sp-ar-rc-4_faulty disconnects from every output.
+  const overlay = finalOverlay();
+  currentExample().nodes.forEach((node) => {
+    if (node.type !== "input" && !overlay.dimmedSet.has(node.id) && !model.stepOfGate.has(node.id)) {
+      entries.push({
+        label: node.label,
+        expression: formatPolynomialExpression(overlay.rootUpdatesMap.get(node.id) ?? node.polynomial),
+        nodeId: node.id
+      });
+    }
+  });
+  renderPolynomialEntries("Rewrite order", entries);
+  specRowsDom = { rows: [...polynomialList.querySelectorAll("[data-spec-step]")], shownStep: 0, currentRow: null };
+}
+
+function updateSpecPolynomialRows(step) {
+  const dom = specRowsDom;
+  const low = Math.min(dom.shownStep, step);
+  const high = Math.max(dom.shownStep, step);
+  for (let index = low; index < high; index += 1) {
+    dom.rows[index]?.classList.toggle("spec-used", index < step);
+  }
+  dom.shownStep = step;
+  const currentRow = step > 0 ? dom.rows[step - 1] ?? null : null;
+  if (dom.currentRow !== currentRow) {
+    dom.currentRow?.classList.remove("spec-current");
+    currentRow?.classList.add("spec-current");
+    currentRow?.scrollIntoView({ block: "nearest" });
+    dom.currentRow = currentRow;
+  }
+}
+
+function renderSpecCaption(model, step) {
+  const steps = model.spec.steps;
+  if (step === 0) {
+    specStepCaption.textContent = "Step 0: nothing substituted yet, this is the specification itself.";
+    return;
+  }
+  const { gate } = steps[step - 1];
+  const label = nodeMap().get(gate)?.label ?? gate;
+  specStepCaption.innerHTML = `Step ${step}: substituted <code>${escapeHtml(label)}</code>.`;
+}
+
+// The current polynomial; once every gate is substituted, the verdict sits in
+// large type right under the remainder (0 for a correct multiplier).
+function renderSpecPolynomial(model, step, terms) {
+  const text = `<span class="spec-polynomial-text">${escapeHtml(formatSpecPolynomial(terms, model))}</span>`;
+  if (step < model.spec.steps.length) {
+    specPolynomial.innerHTML = text;
+    return;
+  }
+  const result = model.spec.result ?? (terms.size ? "INCORRECT MULTIPLIER" : "CORRECT MULTIPLIER");
+  const correct = result === "CORRECT MULTIPLIER";
+  specPolynomial.innerHTML = `${text}<span class="spec-verdict-banner${correct ? "" : " incorrect"}">${escapeHtml(result)}</span>`;
+}
+
+// "+10%" / "-10%" move by a tenth of all substitutions at once (at least one).
+const SPEC_JUMP_FRACTION = 0.1;
+
+function specJumpSize(total) {
+  return Math.max(1, Math.ceil(total * SPEC_JUMP_FRACTION));
 }
 
 function renderSpecView() {
-  const spec = currentSpecification();
-  if (!spec) {
-    specPolynomial.textContent = "No specification data available for this example.";
-    specStepLog.innerHTML = "";
-    specLogDom = { spec: null, shownSteps: 0 };
+  const model = specModel();
+  if (!model) {
+    specPolynomial.textContent = "No specification rewrite data for this example.";
+    specTermCount.textContent = "";
+    specStepCaption.textContent = "";
+    specGraphElement.innerHTML = "";
+    specGraphDom = null;
     specStepLabel.textContent = "0 / 0";
-    specStepBack.disabled = true;
-    specStepForward.disabled = true;
-    specSliceBack.disabled = true;
-    specSliceForward.disabled = true;
+    [specStepBack, specStepForward, specStepBackMany, specStepForwardMany, specStepRunAll, specStepReset].forEach((button) => {
+      button.disabled = true;
+    });
     return;
   }
 
-  specPolynomial.textContent = formatPolynomialExpression(spec.polynomial);
+  const total = model.spec.steps.length;
+  state.specStepIndex = Math.max(0, Math.min(state.specStepIndex, total));
+  const step = state.specStepIndex;
+  const terms = specTermsAt(model, step);
 
-  const totalSteps = spec.steps.length;
-  state.specStepIndex = Math.max(0, Math.min(state.specStepIndex, totalSteps));
-  specStepBack.disabled = state.specStepIndex === 0;
-  specStepForward.disabled = state.specStepIndex === totalSteps;
-  specSliceBack.disabled = state.specStepIndex === 0;
-  specSliceForward.disabled = state.specStepIndex === totalSteps;
+  renderSpecPolynomial(model, step, terms);
+  specTermCount.textContent = `${terms.size.toLocaleString("en-US")} ${terms.size === 1 ? "term" : "terms"}`;
+  renderSpecCaption(model, step);
+  specStepLabel.textContent = `${step} / ${total}`;
+  specStepBack.disabled = step === 0;
+  specStepBackMany.disabled = step === 0;
+  specStepReset.disabled = step === 0;
+  specStepForward.disabled = step === total;
+  specStepForwardMany.disabled = step === total;
+  specStepRunAll.disabled = step === total;
+  const jump = specJumpSize(total);
+  specStepForwardMany.title = `Substitute the next 10% of the gates (${jump} ${jump === 1 ? "step" : "steps"})`;
+  specStepBackMany.title = `Undo the last 10% of the substitutions (${jump} ${jump === 1 ? "step" : "steps"})`;
 
-  specStepLabel.textContent = `${countRewriteSteps(spec.steps.slice(0, state.specStepIndex))} / ${countRewriteSteps(spec.steps)}`;
-
-  renderSpecStepLog(spec);
-  const scrollContainer = specStepLog.closest(".graph-card") ?? specStepLog;
-  scrollContainer.scrollTop = scrollContainer.scrollHeight;
+  if (!specGraphDom || specGraphDom.example !== currentExample() || specGraphDom.zoom !== state.zoom) {
+    buildSpecGraph(model);
+  }
+  updateSpecGraph(model, step, terms);
+  updateSpecPolynomialRows(step);
 }
 
-// What the step log currently shows: which specification and how many of its
-// steps. Each step is one `display: contents` group (layout-neutral), so
-// stepping forward appends groups and stepping back removes the last ones
-// instead of re-rendering the whole log - on sp-ar-rc-64 the full log is
-// ~8k steps and ~18 MB of polynomial text.
-let specLogDom = { spec: null, shownSteps: 0 };
-
-function renderSpecStepLog(spec) {
-  const target = state.specStepIndex;
-  const totalSteps = spec.steps.length;
-
-  specStepLog.querySelector(":scope > .spec-log-result")?.remove();
-  if (specLogDom.spec !== spec || target === 0 || specLogDom.shownSteps === 0) {
-    specStepLog.innerHTML = "";
-    specLogDom = { spec, shownSteps: 0 };
-  }
-
-  while (specLogDom.shownSteps > target) {
-    specStepLog.lastElementChild?.remove();
-    specLogDom.shownSteps -= 1;
-  }
-  if (specLogDom.shownSteps < target) {
-    const groups = spec.steps
-      .slice(specLogDom.shownSteps, target)
-      .map((step) => `<div class="spec-log-step-group">${renderSpecStepEntry(step)}</div>`)
-      .join("");
-    specStepLog.insertAdjacentHTML("beforeend", groups);
-    specLogDom.shownSteps = target;
-  }
-
-  if (target === 0) {
-    specStepLog.innerHTML = `<p class="muted-copy">Step forward to reduce the specification polynomial by each remaining gate constraint, slice by slice, until the remainder collapses to zero.</p>`;
-  } else if (target === totalSteps) {
-    specStepLog.insertAdjacentHTML(
-      "beforeend",
-      `<div class="spec-log-entry spec-log-result">${escapeHtml(spec.result ?? "")}</div>`
-    );
-  }
+function setSpecStep(step) {
+  state.specStepIndex = step;
+  renderSpecView();
 }
 
 function render() {
@@ -1662,8 +1841,6 @@ function render() {
     return;
   }
 
-  ensureSliceSelection();
-  ensureZoomInitialized();
   if (state.activeNodeId && !visibleNodeIds().has(state.activeNodeId)) {
     state.activeNodeId = null;
   }
@@ -1672,12 +1849,16 @@ function render() {
   buildPhaseTabs();
   preprocessingView.hidden = state.phase !== "preprocessing";
   specificationView.hidden = state.phase !== "specification";
+  // After the tabs are shown/hidden: fitting measures the visible graph card.
+  ensureZoomInitialized();
 
   renderHeader();
 
   if (state.phase === "specification") {
-    renderFinalPolynomialList();
+    renderGraphToolbar();
+    renderSpecPolynomialList();
     renderSpecView();
+    updatePannable(specGraphCard);
     return;
   }
 
@@ -1689,83 +1870,146 @@ function render() {
   renderInspector();
 }
 
-zoomOut.addEventListener("click", () => {
-  ensureZoomInitialized();
-  // Large graphs start below 0.45, so the floor drops to whatever fits the
-  // whole graph in the card (zooming out used to jump back *in* to 0.45).
-  state.zoom = Math.max(Math.min(0.45, Math.max(0.05, fitZoom())), state.zoom - 0.15);
-  renderGraphToolbar();
-  renderGraph();
-  renderInspector();
+// Grab-and-drag panning of a zoomed-in graph, as an alternative to the
+// scrollbars. Mouse only: touch screens already scroll the card natively.
+// A press only turns into a drag after a few pixels, so clicking a node still
+// works; the click that ends a drag is swallowed instead.
+const PAN_THRESHOLD = 4;
+let pan = null;
+let suppressClickUntil = 0;
+
+function isPanning() {
+  return Boolean(pan?.moved);
+}
+
+// Only offer dragging (and the grab cursor) when there is something to drag.
+function updatePannable(card) {
+  const pannable = card.scrollWidth > card.clientWidth + 1 || card.scrollHeight > card.clientHeight + 1;
+  card.classList.toggle("pannable", pannable);
+}
+
+function enablePanning(card) {
+  card.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "mouse" || event.button !== 0 || !card.classList.contains("pannable")) {
+      return;
+    }
+    pan = { card, pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: card.scrollLeft, top: card.scrollTop, moved: false };
+  });
+  card.addEventListener("pointermove", (event) => {
+    if (!pan || pan.card !== card || event.pointerId !== pan.pointerId) {
+      return;
+    }
+    const dx = event.clientX - pan.x;
+    const dy = event.clientY - pan.y;
+    if (!pan.moved) {
+      if (Math.hypot(dx, dy) < PAN_THRESHOLD) {
+        return;
+      }
+      pan.moved = true;
+      card.setPointerCapture(event.pointerId);
+      card.classList.add("panning");
+    }
+    card.scrollLeft = pan.left - dx;
+    card.scrollTop = pan.top - dy;
+  });
+  const endPan = (event) => {
+    if (!pan || pan.card !== card || event.pointerId !== pan.pointerId) {
+      return;
+    }
+    if (pan.moved) {
+      card.classList.remove("panning");
+      suppressClickUntil = Date.now() + 150;
+    }
+    pan = null;
+  };
+  card.addEventListener("pointerup", endPan);
+  card.addEventListener("pointercancel", endPan);
+  card.addEventListener(
+    "click",
+    (event) => {
+      if (Date.now() < suppressClickUntil) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    },
+    { capture: true }
+  );
+}
+
+enablePanning(graphCard);
+enablePanning(specGraphCard);
+window.addEventListener("resize", () => {
+  updatePannable(graphCard);
+  updatePannable(specGraphCard);
 });
 
-zoomIn.addEventListener("click", () => {
-  ensureZoomInitialized();
-  state.zoom = Math.min(2.5, state.zoom + 0.15);
+// Both tabs share one zoom level (they draw the same layout).
+function setZoom(zoom) {
+  state.zoom = zoom;
   renderGraphToolbar();
-  renderGraph();
-  renderInspector();
-});
+  if (state.phase === "specification") {
+    renderSpecView();
+  } else {
+    renderGraph();
+    renderInspector();
+  }
+}
+
+// Multiplicative steps: zoom runs from ~3% (sp-ar-rc-64 fitted) to 250%,
+// where fixed +-0.15 steps were far too coarse at the low end. Zooming out
+// stops at whatever shows the whole graph (or 45% for small graphs).
+function zoomOutLevel() {
+  ensureZoomInitialized();
+  const floor = Math.max(MIN_ZOOM, Math.min(0.45, fitZoom()));
+  return Math.min(state.zoom, Math.max(floor, state.zoom / ZOOM_STEP));
+}
+
+function zoomInLevel() {
+  ensureZoomInitialized();
+  return Math.min(MAX_ZOOM, state.zoom * ZOOM_STEP);
+}
+
+zoomOut.addEventListener("click", () => setZoom(zoomOutLevel()));
+zoomIn.addEventListener("click", () => setZoom(zoomInLevel()));
+specZoomOut.addEventListener("click", () => setZoom(zoomOutLevel()));
+specZoomIn.addEventListener("click", () => setZoom(zoomInLevel()));
 
 zoomReset.addEventListener("click", () => {
   state.zoom = null;
   render();
 });
+specZoomFit.addEventListener("click", () => setZoom(Math.max(MIN_ZOOM, fitZoom())));
 
-specStepBack.addEventListener("click", () => {
-  state.specStepIndex = Math.max(0, state.specStepIndex - 1);
-  renderSpecView();
-});
+const specStepTotal = () => specModel()?.spec.steps.length ?? 0;
 
-specStepForward.addEventListener("click", () => {
-  const total = currentSpecification()?.steps.length ?? 0;
-  state.specStepIndex = Math.min(total, state.specStepIndex + 1);
-  renderSpecView();
-});
+specStepBack.addEventListener("click", () => setSpecStep(Math.max(0, state.specStepIndex - 1)));
+specStepForward.addEventListener("click", () => setSpecStep(Math.min(specStepTotal(), state.specStepIndex + 1)));
+specStepRunAll.addEventListener("click", () => setSpecStep(specStepTotal()));
+specStepForwardMany.addEventListener("click", () =>
+  setSpecStep(Math.min(specStepTotal(), state.specStepIndex + specJumpSize(specStepTotal())))
+);
+specStepBackMany.addEventListener("click", () => setSpecStep(Math.max(0, state.specStepIndex - specJumpSize(specStepTotal()))));
+specStepReset.addEventListener("click", () => setSpecStep(0));
 
-// Jump a whole slice at a time instead of one gate substitution at a time.
-specSliceBack.addEventListener("click", () => {
-  const steps = currentSpecification()?.steps ?? [];
-  let target = 0;
-  for (let index = 0; index < state.specStepIndex - 1; index++) {
-    if (steps[index].type === "slice-start") {
-      target = index + 1;
-    }
+// Hovering a node of the specification graph highlights its row, as on the
+// preprocessing graph.
+specGraphElement.addEventListener("mouseover", (event) => {
+  const element = graphNodeOf(event.target);
+  if (element && !isPanning()) {
+    setActiveNode(element.dataset.nodeId);
   }
-  state.specStepIndex = target;
-  renderSpecView();
 });
-
-specSliceForward.addEventListener("click", () => {
-  const steps = currentSpecification()?.steps ?? [];
-  const nextSliceEnd = steps.findIndex(
-    (step, index) => step.type === "slice-end" && index >= state.specStepIndex
-  );
-  state.specStepIndex = nextSliceEnd === -1 ? steps.length : nextSliceEnd + 1;
-  renderSpecView();
-});
-
-specStepRunAll.addEventListener("click", () => {
-  state.specStepIndex = currentSpecification()?.steps.length ?? 0;
-  renderSpecView();
-});
-
-specStepReset.addEventListener("click", () => {
-  state.specStepIndex = 0;
-  renderSpecView();
-});
+specGraphElement.addEventListener("mouseleave", () => setActiveNode(null));
 
 document.addEventListener("keydown", (event) => {
   if (state.phase === "specification") {
-    const total = currentSpecification()?.steps.length ?? 0;
+    // Shift+arrow jumps 10% of the substitutions, like the -10% / +10% buttons.
+    const distance = event.shiftKey ? specJumpSize(specStepTotal()) : 1;
     if (event.key === "ArrowLeft") {
-      state.specStepIndex = Math.max(0, state.specStepIndex - 1);
-      renderSpecView();
+      setSpecStep(Math.max(0, state.specStepIndex - distance));
     }
-
     if (event.key === "ArrowRight") {
-      state.specStepIndex = Math.min(total, state.specStepIndex + 1);
-      renderSpecView();
+      setSpecStep(Math.min(specStepTotal(), state.specStepIndex + distance));
     }
     return;
   }
@@ -1784,6 +2028,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function loadGeneratedExamples() {
+  // Shown if the generated data can't be loaded.
+  examples = fallbackExamples.map(normalizeExample);
   try {
     const response = await fetch(EXAMPLES_MANIFEST_URL, { cache: "no-store" });
     if (!response.ok) {
@@ -1804,12 +2050,10 @@ async function loadGeneratedExamples() {
       state.microStepIndex = null;
       state.activeNodeId = null;
       state.zoom = null;
-      state.viewMode = "full";
-      state.sliceIndex = null;
       state.specStepIndex = 0;
     }
   } catch {
-    examples = fallbackExamples;
+    examples = fallbackExamples.map(normalizeExample);
   }
 }
 
