@@ -505,7 +505,9 @@ def parse_plain_graph(plain_text):
 
 
 # Graphviz's `dot` gives the nicest pictures, but its crossing minimization
-# grows much faster than linearly: ~15s for sp-ar-rc-16 (2.8k gates), still
+# grows much faster than linearly: ~1 min for sp-ar-rc-16 (2.8k gates; ~15s
+# before the inputs were pinned to the bottom rank, whose long edges add
+# many virtual nodes), still
 # unfinished after 10+ minutes for sp-ar-rc-32 (11.7k gates) even with its
 # speed knobs turned down. Above this many AND gates `--layout auto` switches
 # to layered_plain_graph() below, which is linear per sweep.
@@ -563,6 +565,35 @@ def place_layer(layer, desired, widths, xs):
         for _ in range(count):
             xs[layer[index]] = value + offsets[index]
             index += 1
+
+
+def dot_with_inputs_on_bottom(dot_text):
+    """aigtodot's graph, ready for `dot`, with every primary input on the
+    bottom rank. Left alone, dot puts each input just below its lowest
+    consumer, so a multiplier's inputs end up scattered over many ranks.
+    aigtodot's input pins (I*) would hang one rank below the input boxes;
+    build_aig_graph() drops them anyway, so they are left out here and the
+    boxes themselves form the sink rank."""
+    lines = []
+    inputs = []
+    for raw_line in dot_text.splitlines():
+        line = raw_line.strip()
+        edge_match = DOT_EDGE_RE.match(line)
+        node_match = None if edge_match else DOT_NODE_RE.match(line)
+        if edge_match:
+            source, target, _ = edge_match.groups()
+            if source.startswith("I") or target.startswith("I"):
+                continue
+        elif node_match:
+            name, attrs = node_match.groups()
+            if name.startswith("I"):
+                continue
+            if re.search(r"shape=box\b", attrs):
+                inputs.append(name)
+        lines.append(raw_line)
+    closing = max(index for index, line in enumerate(lines) if line.strip() == "}")
+    lines.insert(closing, "{rank=sink; " + " ".join(f'"{name}";' for name in inputs) + "}")
+    return "\n".join(lines) + "\n"
 
 
 def ellipse_boundary(cx, cy, width, height, towards_x, towards_y):
@@ -765,7 +796,9 @@ def build_aig_graph(input_path, verify_log, gate_expressions, output_names, part
         run_command(["aigtodot", "-i", input_path, dot_path])
         dot_text = Path(dot_path).read_text(encoding="utf8")
         if layout == "dot":
-            plain_graph = parse_plain_graph(run_command(["dot", "-Tplain", dot_path]))
+            layout_path = os.path.join(temp_dir, "layout.dot")
+            Path(layout_path).write_text(dot_with_inputs_on_bottom(dot_text), encoding="utf8")
+            plain_graph = parse_plain_graph(run_command(["dot", "-Tplain", layout_path]))
         else:
             plain_graph = layered_plain_graph(dot_text)
 

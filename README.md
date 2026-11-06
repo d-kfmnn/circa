@@ -44,7 +44,7 @@ python3 scripts/generate_demo_data.py --amulet <amulet> \
 
 This writes [data/generated/examples.json](data/generated/examples.json), a small manifest, plus one file per circuit in [data/generated/examples/](data/generated/examples/). The site loads the manifest and fetches each circuit only when it is selected, so the large ones (sp-ar-rc-64 is ~34 MB) are not downloaded up front. Each manifest entry links its file with a content hash, so regenerated circuits are not served stale from cache. Circuit files left over from a previous run are removed. When the manifest is present, the frontend uses it instead of the built-in toy circuits.
 
-Graph layout: circuits with up to 3000 AND gates are laid out by Graphviz `dot`. Above that `dot` is far too slow (sp-ar-rc-32 does not finish in 10+ minutes), so the generator uses its own layered layout instead: inputs at the bottom, outputs just above the gates that drive them, straight edges. Pass `--layout dot` or `--layout layered` to force either one.
+Graph layout: circuits with up to 3000 AND gates are laid out by Graphviz `dot`, with all inputs pinned to the bottom rank. Above that `dot` is far too slow (sp-ar-rc-32 does not finish in 10+ minutes), so the generator uses its own layered layout instead: inputs at the bottom, outputs just above the gates that drive them, straight edges. Pass `--layout dot` or `--layout layered` to force either one.
 
 The generator uses:
 
