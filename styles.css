@@ -405,15 +405,29 @@ body::before {
 }
 
 .poly-list {
-  display: grid;
-  gap: 8px;
   max-height: calc(100vh - 260px);
   overflow: auto;
   padding-right: 4px;
 }
 
-.poly-list.compact {
-  gap: 4px;
+/* The rows, in plain block layout rather than a grid: the list has up to
+   ~48k rows (sp-ar-rc-64), and removing one re-placed every grid item, which
+   cost up to a second per step. The wrapper is as wide as the widest row's
+   longest unbreakable piece (and at least the panel), and every row
+   stretches to it - the width the grid's one column used to have. Spacing is
+   margin-bottom rather than a sibling selector, which would restyle the
+   neighbours of every removed row. */
+.poly-rows {
+  width: min-content;
+  min-width: 100%;
+}
+
+.poly-rows > .poly-item {
+  margin-bottom: 8px;
+}
+
+.poly-list.compact .poly-rows > .poly-item {
+  margin-bottom: 4px;
 }
 
 .poly-item {
@@ -736,8 +750,12 @@ body::before {
   fill: var(--ink);
 }
 
-.graph-node.dimmed {
-  opacity: 0.2;
+/* Faded shape by shape rather than with opacity on the node's <g>: group
+   opacity makes the browser composite every faded node on its own, and with
+   ~40k eliminated nodes on sp-ar-rc-64 that made each repaint take seconds. */
+.graph-node.dimmed > * {
+  fill-opacity: 0.2;
+  stroke-opacity: 0.2;
 }
 
 .graph-node.root-updated ellipse,
@@ -768,7 +786,13 @@ body::before {
   pointer-events: none;
 }
 
-.graph-node.spec-rewritten,
+/* Nodes faded per shape, like .dimmed. Edges keep opacity, which also fades
+   their inversion bubble (a marker, which stroke-opacity would not reach). */
+.graph-node.spec-rewritten:not(.spec-current) > * {
+  fill-opacity: 0.22;
+  stroke-opacity: 0.22;
+}
+
 .graph-edge.spec-rewritten {
   opacity: 0.22;
 }
@@ -778,10 +802,6 @@ body::before {
 .graph-node.spec-in-cut polygon {
   stroke: var(--teal);
   stroke-width: 4;
-}
-
-.graph-node.spec-current {
-  opacity: 1;
 }
 
 .graph-node.spec-current ellipse,
@@ -795,15 +815,42 @@ body::before {
   fill: white;
 }
 
-/* Rewrite-order list: polynomials already substituted, and the latest one. */
+/* Rewrite-order list: polynomials already substituted, and the latest one.
+   Used rows are faded with lighter colours (what opacity 0.45 looked like)
+   rather than with opacity: below 1, opacity gives every row a compositing
+   layer of its own, which made "Run all" take seconds on sp-ar-rc-64's 8k
+   rows. */
 .poly-item.spec-used {
-  opacity: 0.45;
+  background: rgba(255, 250, 242, 0.45);
+  border-color: rgba(68, 49, 18, 0.04);
+}
+
+.poly-item.spec-used h4 {
+  color: #cd9b85;
+}
+
+.poly-item.spec-used p {
+  color: #b4aca2;
+}
+
+.poly-item.spec-used[data-poly-node-id]:hover,
+.poly-item.spec-used[data-poly-node-id]:focus-visible,
+.poly-item.spec-used.active-link {
+  border-color: rgba(249, 115, 22, 0.42);
+  background: rgba(255, 241, 226, 0.92);
 }
 
 .poly-item.spec-current {
-  opacity: 1;
   border-color: var(--highlight);
   background: rgba(249, 115, 22, 0.14);
+}
+
+.poly-item.spec-current h4 {
+  color: var(--rust);
+}
+
+.poly-item.spec-current p {
+  color: var(--muted);
 }
 
 .inspector-card {

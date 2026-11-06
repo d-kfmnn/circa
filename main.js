@@ -271,10 +271,6 @@ function currentExample() {
   return examples[state.exampleIndex];
 }
 
-function activeNodes() {
-  return currentExample().nodes;
-}
-
 function activeEdges() {
   const overlay = currentOverlay();
   // Nothing has been eliminated yet: show the original, graphviz-laid-out
@@ -345,6 +341,27 @@ function currentMicroStepLimit() {
 
 let overlayCache = { example: null, stageIndex: null, microStepLimit: null, overlay: null };
 
+// A rewired edge (gate -> a variable of its updated polynomial) is the same
+// object in every overlay that has it, like the original AIG edges are, so
+// renderGraph can update the drawn graph by edge identity instead of
+// rebuilding it on every step.
+const rewiredEdgeCache = new WeakMap();
+
+function rewiredEdge(example, from, to) {
+  let edges = rewiredEdgeCache.get(example);
+  if (!edges) {
+    edges = new Map();
+    rewiredEdgeCache.set(example, edges);
+  }
+  const key = `${from} ${to}`;
+  let edge = edges.get(key);
+  if (!edge) {
+    edge = { from, to, inverted: false };
+    edges.set(key, edge);
+  }
+  return edge;
+}
+
 // Reduction-phase stages (Eliminate internal xor gates / Eliminate
 // single-occurrence nodes / Eliminate no clear COI nodes) don't carry a full
 // resnapshot of every gate alive at that point - with 40-150+ individual
@@ -357,7 +374,8 @@ let overlayCache = { example: null, stageIndex: null, microStepLimit: null, over
 // applying any reduction-phase stage strictly before it, and applying only
 // the current stage's own microSteps up to currentMicroStepLimit().
 function computeOverlayForStage(stageIndex, microLimit) {
-  const stages = currentExample().stages;
+  const example = currentExample();
+  const stages = example.stages;
   let checkpointIndex = stageIndex;
   while (checkpointIndex > 0 && !Object.prototype.hasOwnProperty.call(stages[checkpointIndex], "dimmedNodes")) {
     checkpointIndex -= 1;
@@ -377,7 +395,7 @@ function computeOverlayForStage(stageIndex, microLimit) {
     }
   }
 
-  const aliveIds = new Set(currentExample().nodes.map((node) => node.id).filter((id) => !dimmed.has(id)));
+  const aliveIds = new Set(example.nodes.map((node) => node.id).filter((id) => !dimmed.has(id)));
   const edges = [];
 
   // Edge convention (matches the original AIG data): `from` is the
@@ -388,7 +406,7 @@ function computeOverlayForStage(stageIndex, microLimit) {
   // exactly the gates whose fan-in hasn't changed) still has its original,
   // unrewired edges: keep those as-is rather than dropping them just
   // because they aren't in the delta trail.
-  currentExample().edges.forEach((edge) => {
+  example.edges.forEach((edge) => {
     if (!live.has(edge.from) && aliveIds.has(edge.from)) {
       edges.push(edge);
     }
@@ -399,7 +417,7 @@ function computeOverlayForStage(stageIndex, microLimit) {
       if (token === name || !aliveIds.has(token)) {
         return;
       }
-      edges.push({ from: name, to: token, inverted: false });
+      edges.push(rewiredEdge(example, name, token));
     });
   });
 
@@ -818,17 +836,33 @@ function renderStageList() {
   });
 }
 
+// Every node that can have a row, in label order. Labels never change, so
+// this is sorted once per circuit rather than on every step (~48k labels on
+// sp-ar-rc-64).
+const polynomialNodesCache = new WeakMap();
+
+function polynomialNodesInLabelOrder() {
+  const example = currentExample();
+  if (!polynomialNodesCache.has(example)) {
+    polynomialNodesCache.set(
+      example,
+      example.nodes.filter((node) => node.type !== "input").sort((left, right) => compareLabels(left.label, right.label))
+    );
+  }
+  return polynomialNodesCache.get(example);
+}
+
 // The stage's live polynomial set in decreasing label order, preceded by any
-// stage-level equations that don't belong to a single node.
+// stage-level equations that don't belong to a single node. `key` identifies
+// a row across steps (see updatePolynomialEntries).
 function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials) {
   const entries = [];
   const seen = new Set();
 
-  const polynomialNodes = activeNodes()
-    .filter((node) => !dimmedNodes.has(node.id) && node.type !== "input")
-    .sort((left, right) => compareLabels(left.label, right.label));
-
-  polynomialNodes.forEach((node) => {
+  polynomialNodesInLabelOrder().forEach((node) => {
+    if (dimmedNodes.has(node.id)) {
+      return;
+    }
     const expression = formatPolynomialExpression(rootUpdates.get(node.id) ?? node.polynomial);
     if (!expression) {
       return;
@@ -838,7 +872,7 @@ function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials) {
       return;
     }
     seen.add(dedupeKey);
-    entries.push({ label: node.label, expression, nodeId: node.id });
+    entries.push({ key: `node:${node.id}`, label: node.label, expression, nodeId: node.id });
   });
 
   extraPolynomials.forEach((entry) => {
@@ -848,7 +882,7 @@ function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials) {
       return;
     }
     seen.add(dedupeKey);
-    entries.push({ label: entry.label, expression, nodeId: null });
+    entries.push({ key: `extra:${dedupeKey}`, label: entry.label, expression, nodeId: null });
   });
 
   return entries.reverse();
@@ -856,41 +890,121 @@ function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials) {
 
 // `entry.step`, when present, is the specification-rewrite step that
 // substitutes this polynomial (Specification rewrite tab only).
-function renderPolynomialEntries(title, entries) {
-  polynomialTitle.textContent = title;
-  polynomialCount.textContent = `${entries.length} eqs`;
-
-  const rows = entries.map((entry) => {
-    const nodeAttributes = entry.nodeId
-      ? ` data-poly-node-id="${escapeHtml(entry.nodeId)}" tabindex="0" role="button" aria-label="highlight ${escapeHtml(entry.label)}"`
-      : "";
-    const stepAttribute = entry.step ? ` data-spec-step="${entry.step}"` : "";
-    return `
+function polynomialEntryMarkup(entry) {
+  const nodeAttributes = entry.nodeId
+    ? ` data-poly-node-id="${escapeHtml(entry.nodeId)}" tabindex="0" role="button" aria-label="highlight ${escapeHtml(entry.label)}"`
+    : "";
+  const stepAttribute = entry.step ? ` data-spec-step="${entry.step}"` : "";
+  return `
       <article class="poly-item compact-line"${nodeAttributes}${stepAttribute}>
         <h4>${escapeHtml(entry.label)}</h4>
         <p>${escapeHtml(entry.expression)}</p>
       </article>
     `;
-  });
+}
 
-  polynomialList.innerHTML = rows.join("");
+const rowTemplate = document.createElement("template");
 
-  polyDom = { elements: new Map(), highlightedNodeId: null };
+function polynomialEntryElement(entry) {
+  rowTemplate.innerHTML = polynomialEntryMarkup(entry);
+  return rowTemplate.content.firstElementChild;
+}
+
+// Rebuilds the whole list. `kind` names which list this is, so the
+// preprocessing list can later be updated in place (updatePolynomialEntries)
+// as long as it is still the one on screen.
+function renderPolynomialEntries(title, entries, kind = null) {
+  polynomialTitle.textContent = title;
+  polynomialCount.textContent = `${entries.length} eqs`;
+  // The rows sit in one wrapper that is as wide as the widest row (see
+  // .poly-rows), so they all share that width like grid items would.
+  polynomialList.innerHTML = `<div class="poly-rows">${entries.map(polynomialEntryMarkup).join("")}</div>`;
+
+  polyDom = {
+    kind,
+    example: currentExample(),
+    container: polynomialList.firstElementChild,
+    elements: new Map(),
+    rows: new Map(),
+    highlightedNodeId: null
+  };
+  if (kind) {
+    const elements = polynomialList.querySelectorAll(".poly-item");
+    entries.forEach((entry, index) => {
+      polyDom.rows.set(entry.key, { element: elements[index], expression: entry.expression, nodeId: entry.nodeId });
+    });
+  }
   polynomialList.querySelectorAll("[data-poly-node-id]").forEach((element) => {
     polyDom.elements.set(element.dataset.polyNodeId, element);
   });
 }
 
+// Brings the rendered preprocessing list to `entries` by touching only the
+// rows that changed: a node-by-node step removes the eliminated gate's row
+// and rewrites its parent's. Rebuilding all ~48k rows of sp-ar-rc-64 instead
+// took seconds per click. Rows keep their relative order (label order), so a
+// row that comes back (stepping backwards) goes right after its predecessor.
+// Returns false when most rows would be new anyway, where one rebuild is
+// cheaper than inserting them one by one.
+function updatePolynomialEntries(title, entries) {
+  const rows = polyDom.rows;
+  const added = entries.reduce((count, entry) => count + (rows.has(entry.key) ? 0 : 1), 0);
+  if (added > Math.max(500, entries.length / 4)) {
+    return false;
+  }
+
+  polynomialTitle.textContent = title;
+  polynomialCount.textContent = `${entries.length} eqs`;
+  const keys = new Set(entries.map((entry) => entry.key));
+  rows.forEach((row, key) => {
+    if (!keys.has(key)) {
+      row.element.remove();
+      rows.delete(key);
+      if (row.nodeId) {
+        polyDom.elements.delete(row.nodeId);
+      }
+    }
+  });
+
+  let previous = null;
+  entries.forEach((entry) => {
+    let row = rows.get(entry.key);
+    if (!row) {
+      row = { element: polynomialEntryElement(entry), expression: entry.expression, nodeId: entry.nodeId };
+      if (previous) {
+        previous.after(row.element);
+      } else {
+        polyDom.container.prepend(row.element);
+      }
+      rows.set(entry.key, row);
+      if (entry.nodeId) {
+        polyDom.elements.set(entry.nodeId, row.element);
+        row.element.classList.toggle("active-link", entry.nodeId === polyDom.highlightedNodeId);
+      }
+    } else if (row.expression !== entry.expression) {
+      row.element.querySelector("p").textContent = entry.expression;
+      row.expression = entry.expression;
+    }
+    previous = row.element;
+  });
+  return true;
+}
+
 function renderPolynomialList() {
   const stage = currentStage();
   const entries = buildPolynomialEntries(currentStageDimmedSet(), currentStageRootUpdatesMap(), stage.polynomials ?? []);
-  renderPolynomialEntries(`${stage.name} active set`, entries);
+  const title = `${stage.name} active set`;
+  const inPlace = polyDom.kind === "preprocessing" && polyDom.example === currentExample();
+  if (!inPlace || !updatePolynomialEntries(title, entries)) {
+    renderPolynomialEntries(title, entries, "preprocessing");
+  }
 }
 
-// Row elements of the rendered polynomial list by node id, and which one
+// The rendered polynomial list: row elements by node id, and which one
 // currently carries the hover highlight, so a hover touches two rows instead
-// of every row.
-let polyDom = { elements: new Map(), highlightedNodeId: null };
+// of every row. For the preprocessing list also every row by entry key, for
+// updatePolynomialEntries.
+let polyDom = { kind: null, example: null, container: null, elements: new Map(), rows: new Map(), highlightedNodeId: null };
 
 function setActiveNode(nodeId) {
   if (state.activeNodeId === nodeId) {
@@ -986,7 +1100,7 @@ function renderInspector() {
     nodeInspector.classList.add("is-empty");
     nodeName.textContent = "Hover over a node to examine details";
     nodeRole.textContent = example.stageNote;
-    const firstRoot = [...rootUpdates.entries()][0];
+    const firstRoot = rootUpdates.entries().next().value;
     nodePolynomial.textContent = firstRoot
       ? `${firstRoot[0]}: ${firstRoot[1]}`
       : "The underlying circuit polynomial will appear here.";
@@ -1209,16 +1323,28 @@ function ensureZoomInitialized() {
   state.zoom = Math.max(MIN_ZOOM, fitZoom());
 }
 
-// The rendered graph's elements, indexed so a hover can restyle just the
-// nodes and edges whose highlight changes (see updateGraphHighlight).
+// The rendered preprocessing graph: which state it shows (`view`, and the
+// overlay's dimmed / root-updated sets) and its elements - nodes by id, edge
+// paths by edge object - so a step or a hover only restyles what changed
+// (see renderGraph and updateGraphHighlight).
 let graphDom = {
   example: null,
+  view: null,
+  showLabels: null,
+  dimmedSet: new Set(),
+  rootUpdatesMap: new Map(),
   nodeElements: new Map(),
-  edgeElements: [],
-  edgeIndexesByNode: new Map(),
-  edges: [],
+  edgeElements: new Map(),
+  edgeLayer: null,
   highlightedNodeId: null
 };
+
+// Node labels are left out of large graphs below LABEL_MIN_ZOOM (see there).
+function labelsShown(nodeCount) {
+  return nodeCount <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 // Marker ids are document-global, so each graph gets its own.
 function inversionMarkerDefs(id) {
@@ -1240,21 +1366,31 @@ function edgeLayerMarkup(edges, map, markerId) {
     .join("");
 }
 
+// Draws the preprocessing graph for the current state. The SVG is only built
+// from scratch for a new circuit or when labels come or go with the zoom;
+// otherwise a step updates it in place (updateGraphInPlace) and a zoom just
+// resizes it - rebuilding sp-ar-rc-64's ~190k SVG elements took seconds.
 function renderGraph() {
   const example = currentExample();
-  const nodes = visibleNodes();
-  const edges = visibleEdges();
-  const map = new Map(nodes.map((node) => [node.id, node]));
-  sizeGraphElement(graphElement, graphViewBox(nodes, edges));
+  const view = currentGraphView();
+  sizeGraphElement(graphElement, graphViewBox(view.nodes, view.edges));
+  const showLabels = labelsShown(view.nodes.length);
+  if (graphDom.example !== example || graphDom.showLabels !== showLabels) {
+    buildGraph(view, showLabels);
+  } else {
+    updateGraphInPlace(view);
+  }
+  updatePannable(graphCard);
+}
 
-  const dimmedNodes = currentStageDimmedSet();
-  const rootUpdates = currentStageRootUpdatesMap();
-  const showLabels = nodes.length <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
-  const nodeLayer = nodes.map((node) => nodeMarkup(node, dimmedNodes, rootUpdates, showLabels)).join("");
+function buildGraph(view, showLabels) {
+  const overlay = currentOverlay();
+  const map = nodeMap();
+  const nodeLayer = view.nodes.map((node) => nodeMarkup(node, overlay.dimmedSet, overlay.rootUpdatesMap, showLabels)).join("");
 
   graphElement.innerHTML = `
     ${inversionMarkerDefs("inversionBubble")}
-    <g class="edge-layer">${edgeLayerMarkup(edges, map, "inversionBubble")}</g>
+    <g class="edge-layer">${edgeLayerMarkup(view.edges, map, "inversionBubble")}</g>
     <g class="node-layer">${nodeLayer}</g>
   `;
 
@@ -1262,45 +1398,119 @@ function renderGraph() {
   graphElement.querySelectorAll("[data-node-id]").forEach((element) => {
     nodeElements.set(element.dataset.nodeId, element);
   });
-  const edgeIndexesByNode = new Map();
-  edges.forEach((edge, index) => {
-    [edge.from, edge.to].forEach((nodeId) => {
-      if (!edgeIndexesByNode.has(nodeId)) {
-        edgeIndexesByNode.set(nodeId, []);
-      }
-      edgeIndexesByNode.get(nodeId).push(index);
-    });
+  // querySelectorAll returns document order, which is the edges' index order.
+  const edgeElements = new Map();
+  graphElement.querySelectorAll("[data-edge-index]").forEach((element, index) => {
+    edgeElements.set(view.edges[index], element);
   });
   graphDom = {
-    example,
+    example: currentExample(),
+    view,
+    showLabels,
+    dimmedSet: overlay.dimmedSet,
+    rootUpdatesMap: overlay.rootUpdatesMap,
     nodeElements,
-    // querySelectorAll returns document order, which is the edges' index order.
-    edgeElements: [...graphElement.querySelectorAll("[data-edge-index]")],
-    edgeIndexesByNode,
-    edges,
+    edgeElements,
+    edgeLayer: graphElement.querySelector(".edge-layer"),
     highlightedNodeId: state.activeNodeId
   };
-  updatePannable(graphCard);
 }
 
-// Only restyles what changed: a hover changes the highlight of two nodes and
-// their edges, so only those are touched (it used to restyle every node and
-// look each edge up with its own querySelector - quadratic in the edge
-// count).
-function updateGraphHighlight() {
-  if (graphDom.example === currentExample() && graphDom.highlightedNodeId !== state.activeNodeId) {
-    [graphDom.highlightedNodeId, state.activeNodeId].forEach((nodeId) => {
-      if (nodeId === null) {
-        return;
-      }
-      graphDom.nodeElements.get(nodeId)?.classList.toggle("active", nodeId === state.activeNodeId);
-      (graphDom.edgeIndexesByNode.get(nodeId) ?? []).forEach((index) => {
-        const edge = graphDom.edges[index];
-        const isActive = state.activeNodeId !== null && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
-        graphDom.edgeElements[index].classList.toggle("active", isActive);
-      });
+function edgeElement(edge, map, markerId) {
+  const element = document.createElementNS(SVG_NS, "path");
+  element.setAttribute("class", edgeClassNames(edge));
+  element.setAttribute("d", edgePath(edge, map));
+  if (edge.inverted) {
+    element.setAttribute("marker-end", `url(#${markerId})`);
+  }
+  return element;
+}
+
+// Adds or removes the classes of the nodes that entered or left a set.
+function toggleChangedNodes(previous, next, className) {
+  if (previous === next) {
+    return;
+  }
+  for (const id of previous.keys()) {
+    if (!next.has(id)) {
+      graphDom.nodeElements.get(id)?.classList.remove(className);
+    }
+  }
+  for (const id of next.keys()) {
+    if (!previous.has(id)) {
+      graphDom.nodeElements.get(id)?.classList.add(className);
+    }
+  }
+}
+
+// Moves the drawn graph from the state it shows to `view`: only the nodes
+// whose dimmed / root-updated status changed are restyled, and only the edges
+// that appeared or disappeared are added or removed (edges are the same
+// objects in every state, see rewiredEdge). Even "Undo all" from the end is
+// cheaper this way than a rebuild (measured on sp-ar-rc-64).
+function updateGraphInPlace(view) {
+  if (graphDom.view === view) {
+    return;
+  }
+  const overlay = currentOverlay();
+  const edgeElements = graphDom.edgeElements;
+  const added = view.edges.filter((edge) => !edgeElements.has(edge));
+  const next = new Set(view.edges);
+  edgeElements.forEach((element, edge) => {
+    if (!next.has(edge)) {
+      element.remove();
+      edgeElements.delete(edge);
+    }
+  });
+  if (added.length) {
+    const map = nodeMap();
+    const fragment = document.createDocumentFragment();
+    added.forEach((edge) => {
+      const element = edgeElement(edge, map, "inversionBubble");
+      edgeElements.set(edge, element);
+      fragment.append(element);
     });
-    graphDom.highlightedNodeId = state.activeNodeId;
+    graphDom.edgeLayer.append(fragment);
+  }
+
+  toggleChangedNodes(graphDom.dimmedSet, overlay.dimmedSet, "dimmed");
+  toggleChangedNodes(graphDom.rootUpdatesMap, overlay.rootUpdatesMap, "root-updated");
+  graphDom.dimmedSet = overlay.dimmedSet;
+  graphDom.rootUpdatesMap = overlay.rootUpdatesMap;
+  graphDom.view = view;
+
+  // New edges were drawn with the highlight of state.activeNodeId; bring the
+  // rest in line if the highlight moved since the graph was last updated.
+  syncGraphHighlight();
+}
+
+// Moves the hover highlight on the preprocessing graph from the node that
+// has it to state.activeNodeId: those two nodes and their edges only (it
+// used to restyle every node and look each edge up with its own
+// querySelector - quadratic in the edge count).
+function syncGraphHighlight() {
+  if (graphDom.highlightedNodeId === state.activeNodeId) {
+    return;
+  }
+  const view = graphDom.view;
+  [graphDom.highlightedNodeId, state.activeNodeId].forEach((nodeId) => {
+    if (nodeId === null) {
+      return;
+    }
+    graphDom.nodeElements.get(nodeId)?.classList.toggle("active", nodeId === state.activeNodeId);
+    [...(view.children.get(nodeId) ?? []), ...(view.parents.get(nodeId) ?? [])].forEach((edge) => {
+      const isActive = state.activeNodeId !== null && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
+      graphDom.edgeElements.get(edge)?.classList.toggle("active", isActive);
+    });
+  });
+  graphDom.highlightedNodeId = state.activeNodeId;
+}
+
+function updateGraphHighlight() {
+  // Only while the drawn graph shows the current state; otherwise the next
+  // renderGraph brings the highlight along (syncGraphHighlight).
+  if (graphDom.example === currentExample() && graphDom.view === currentGraphView()) {
+    syncGraphHighlight();
   }
 
   if (specGraphDom && specGraphDom.example === currentExample() && specGraphDom.hoveredNodeId !== state.activeNodeId) {
@@ -1606,7 +1816,7 @@ function buildSpecGraph(model) {
   const box = graphViewBox(nodes, edges);
   sizeGraphElement(specGraphElement, box);
 
-  const showLabels = nodes.length <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
+  const showLabels = labelsShown(nodes.length);
   const noneDimmed = new Set();
   const noneRewritten = new Map();
   specGraphElement.innerHTML = `
@@ -1633,6 +1843,8 @@ function buildSpecGraph(model) {
     example,
     model,
     zoom: state.zoom,
+    showLabels,
+    nodeCount: nodes.length,
     box,
     map,
     nodeElements,
@@ -1824,8 +2036,14 @@ function renderSpecView() {
   specStepForwardMany.title = `Substitute the next 10% of the gates (${jump} ${jump === 1 ? "step" : "steps"})`;
   specStepBackMany.title = `Undo the last 10% of the substitutions (${jump} ${jump === 1 ? "step" : "steps"})`;
 
-  if (!specGraphDom || specGraphDom.example !== currentExample() || specGraphDom.zoom !== state.zoom) {
+  // Like the preprocessing graph: a zoom only resizes the drawing, unless
+  // labels come or go with it.
+  if (!specGraphDom || specGraphDom.example !== currentExample() || specGraphDom.showLabels !== labelsShown(specGraphDom.nodeCount)) {
     buildSpecGraph(model);
+  } else if (specGraphDom.zoom !== state.zoom) {
+    sizeGraphElement(specGraphElement, specGraphDom.box);
+    specGraphDom.zoom = state.zoom;
+    updatePannable(specGraphCard);
   }
   updateSpecGraph(model, step, terms);
   updateSpecPolynomialRows(step);
