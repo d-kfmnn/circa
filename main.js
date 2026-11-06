@@ -8,20 +8,20 @@ const fallbackExamples = [
     stageNote:
       "This example is small enough to discuss every gate, but still shows non-trivial elimination and rewriting steps.",
     nodes: [
-      { id: "a0", label: "a0", type: "input", x: 90, y: 86, role: "Primary input", signal: "Bit a0", polynomial: "a0 - a0 = 0", stageNote: "Inputs remain symbolic anchors throughout preprocessing." },
-      { id: "a1", label: "a1", type: "input", x: 90, y: 166, role: "Primary input", signal: "Bit a1", polynomial: "a1 - a1 = 0", stageNote: "High-order multiplicand bit." },
-      { id: "b0", label: "b0", type: "input", x: 90, y: 246, role: "Primary input", signal: "Bit b0", polynomial: "b0 - b0 = 0", stageNote: "Multiplier bit reused in two partial products." },
-      { id: "b1", label: "b1", type: "input", x: 90, y: 326, role: "Primary input", signal: "Bit b1", polynomial: "b1 - b1 = 0", stageNote: "High-order multiplier bit." },
-      { id: "n1", label: "n1", type: "and", x: 260, y: 76, role: "Partial product", signal: "a0 AND b0", polynomial: "n1 - a0*b0 = 0", stageNote: "A direct multiplicative monomial; often preserved until late substitution." },
-      { id: "n2", label: "n2", type: "and", x: 260, y: 156, role: "Partial product", signal: "a0 AND b1", polynomial: "n2 - a0*b1 = 0", stageNote: "Shares a0 with n1; structural hashing can expose common support." },
-      { id: "n3", label: "n3", type: "and", x: 260, y: 236, role: "Partial product", signal: "a1 AND b0", polynomial: "n3 - a1*b0 = 0", stageNote: "Combined with n2 during middle-bit rewriting." },
-      { id: "n4", label: "n4", type: "and", x: 260, y: 316, role: "Partial product", signal: "a1 AND b1", polynomial: "n4 - a1*b1 = 0", stageNote: "Feeds the final carry relation." },
-      { id: "n5", label: "m1", type: "and", x: 440, y: 186, role: "Merged middle support", signal: "Encoded support for n2 and n3", polynomial: "m1 - (n2 + n3 - 2*n2*n3) = 0", stageNote: "Boolean normalization turns XOR-like behavior into a polynomial identity." },
-      { id: "n6", label: "c1", type: "and", x: 440, y: 286, role: "Carry support", signal: "carry from n2 and n3", polynomial: "c1 - n2*n3 = 0", stageNote: "This term is frequently isolated and then eliminated by substitution." },
-      { id: "p0", label: "p0", type: "output", x: 636, y: 80, role: "Output bit", signal: "Least significant product bit", polynomial: "p0 - n1 = 0", stageNote: "Output rewrites usually start with direct equalities like this." },
-      { id: "p1", label: "p1", type: "output", x: 636, y: 182, role: "Output bit", signal: "Middle product bit", polynomial: "p1 - m1 = 0", stageNote: "Middle bit is where polynomial simplification becomes visible in the demo." },
-      { id: "p2", label: "p2", type: "output", x: 636, y: 284, role: "Output bit", signal: "Third product bit", polynomial: "p2 - (n4 + c1 - 2*n4*c1) = 0", stageNote: "Carry-aware relation before final specification matching." },
-      { id: "p3", label: "p3", type: "output", x: 636, y: 364, role: "Output bit", signal: "Most significant product bit", polynomial: "p3 - n4*c1 = 0", stageNote: "Final carry-out relation closes the bit-level structure." }
+      { id: "a0", label: "a0", type: "input", x: 90, y: 86, role: "Primary input", signal: "Bit a0", polynomial: "a0 - a0 = 0" },
+      { id: "a1", label: "a1", type: "input", x: 90, y: 166, role: "Primary input", signal: "Bit a1", polynomial: "a1 - a1 = 0" },
+      { id: "b0", label: "b0", type: "input", x: 90, y: 246, role: "Primary input", signal: "Bit b0", polynomial: "b0 - b0 = 0" },
+      { id: "b1", label: "b1", type: "input", x: 90, y: 326, role: "Primary input", signal: "Bit b1", polynomial: "b1 - b1 = 0" },
+      { id: "n1", label: "n1", type: "and", x: 260, y: 76, role: "Partial product", signal: "a0 AND b0", polynomial: "n1 - a0*b0 = 0" },
+      { id: "n2", label: "n2", type: "and", x: 260, y: 156, role: "Partial product", signal: "a0 AND b1", polynomial: "n2 - a0*b1 = 0" },
+      { id: "n3", label: "n3", type: "and", x: 260, y: 236, role: "Partial product", signal: "a1 AND b0", polynomial: "n3 - a1*b0 = 0" },
+      { id: "n4", label: "n4", type: "and", x: 260, y: 316, role: "Partial product", signal: "a1 AND b1", polynomial: "n4 - a1*b1 = 0" },
+      { id: "n5", label: "m1", type: "and", x: 440, y: 186, role: "Merged middle support", signal: "Encoded support for n2 and n3", polynomial: "m1 - (n2 + n3 - 2*n2*n3) = 0" },
+      { id: "n6", label: "c1", type: "and", x: 440, y: 286, role: "Carry support", signal: "carry from n2 and n3", polynomial: "c1 - n2*n3 = 0" },
+      { id: "p0", label: "p0", type: "output", x: 636, y: 80, role: "Output bit", signal: "Least significant product bit", polynomial: "p0 - n1 = 0" },
+      { id: "p1", label: "p1", type: "output", x: 636, y: 182, role: "Output bit", signal: "Middle product bit", polynomial: "p1 - m1 = 0" },
+      { id: "p2", label: "p2", type: "output", x: 636, y: 284, role: "Output bit", signal: "Third product bit", polynomial: "p2 - (n4 + c1 - 2*n4*c1) = 0" },
+      { id: "p3", label: "p3", type: "output", x: 636, y: 364, role: "Output bit", signal: "Most significant product bit", polynomial: "p3 - n4*c1 = 0" }
     ],
     edges: [
       { from: "a0", to: "n1" },
@@ -121,26 +121,26 @@ const fallbackExamples = [
     stageNote:
       "This graph emphasizes how preprocessing reduces a larger internal support set before the final arithmetic rewrite.",
     nodes: [
-      { id: "a0", label: "a0", type: "input", x: 76, y: 66, role: "Primary input", signal: "Bit a0", polynomial: "a0 - a0 = 0", stageNote: "Low-order multiplicand bit." },
-      { id: "a1", label: "a1", type: "input", x: 76, y: 134, role: "Primary input", signal: "Bit a1", polynomial: "a1 - a1 = 0", stageNote: "Middle multiplicand bit." },
-      { id: "a2", label: "a2", type: "input", x: 76, y: 202, role: "Primary input", signal: "Bit a2", polynomial: "a2 - a2 = 0", stageNote: "High-order multiplicand bit." },
-      { id: "b0", label: "b0", type: "input", x: 76, y: 286, role: "Primary input", signal: "Bit b0", polynomial: "b0 - b0 = 0", stageNote: "Multiplier LSB." },
-      { id: "b1", label: "b1", type: "input", x: 76, y: 354, role: "Primary input", signal: "Bit b1", polynomial: "b1 - b1 = 0", stageNote: "Multiplier MSB." },
-      { id: "n1", label: "u0", type: "and", x: 224, y: 60, role: "Partial product", signal: "a0 AND b0", polynomial: "u0 - a0*b0 = 0", stageNote: "Direct monomial support." },
-      { id: "n2", label: "u1", type: "and", x: 224, y: 126, role: "Partial product", signal: "a1 AND b0", polynomial: "u1 - a1*b0 = 0", stageNote: "Used in the second weight position." },
-      { id: "n3", label: "u2", type: "and", x: 224, y: 192, role: "Partial product", signal: "a2 AND b0", polynomial: "u2 - a2*b0 = 0", stageNote: "Carries into higher weights." },
-      { id: "n4", label: "v0", type: "and", x: 224, y: 272, role: "Partial product", signal: "a0 AND b1", polynomial: "v0 - a0*b1 = 0", stageNote: "Second-row partial product." },
-      { id: "n5", label: "v1", type: "and", x: 224, y: 338, role: "Partial product", signal: "a1 AND b1", polynomial: "v1 - a1*b1 = 0", stageNote: "Combines with u2 later." },
-      { id: "n6", label: "v2", type: "and", x: 224, y: 404, role: "Partial product", signal: "a2 AND b1", polynomial: "v2 - a2*b1 = 0", stageNote: "Highest direct partial product." },
-      { id: "s1", label: "s1", type: "and", x: 404, y: 126, role: "Weight-1 sum", signal: "support for u1 and v0", polynomial: "s1 - (u1 + v0 - 2*u1*v0) = 0", stageNote: "Booleanized sum node at weight 2^1." },
-      { id: "c1", label: "c1", type: "and", x: 404, y: 214, role: "Weight-1 carry", signal: "carry from u1 and v0", polynomial: "c1 - u1*v0 = 0", stageNote: "Carry isolation shrinks later equations." },
-      { id: "s2", label: "s2", type: "and", x: 404, y: 300, role: "Weight-2 sum", signal: "support for u2, v1, c1", polynomial: "s2 - (u2 + v1 + c1 - 2*u2*v1 - 2*u2*c1 - 2*v1*c1 + 4*u2*v1*c1) = 0", stageNote: "This is the densest local polynomial in the demo." },
-      { id: "c2", label: "c2", type: "and", x: 404, y: 388, role: "Weight-2 carry", signal: "carry support into top weight", polynomial: "c2 - (u2*v1 + u2*c1 + v1*c1 - 2*u2*v1*c1) = 0", stageNote: "High-weight carry support before output rewriting." },
-      { id: "p0", label: "p0", type: "output", x: 640, y: 64, role: "Output bit", signal: "Weight 2^0", polynomial: "p0 - u0 = 0", stageNote: "Direct output mapping." },
-      { id: "p1", label: "p1", type: "output", x: 640, y: 140, role: "Output bit", signal: "Weight 2^1", polynomial: "p1 - s1 = 0", stageNote: "Derived after the first local rewrite." },
-      { id: "p2", label: "p2", type: "output", x: 640, y: 244, role: "Output bit", signal: "Weight 2^2", polynomial: "p2 - s2 = 0", stageNote: "This bit shows the benefit of eliminating c1 first." },
-      { id: "p3", label: "p3", type: "output", x: 640, y: 334, role: "Output bit", signal: "Weight 2^3", polynomial: "p3 - (v2 + c2 - 2*v2*c2) = 0", stageNote: "Final non-trivial output relation." },
-      { id: "p4", label: "p4", type: "output", x: 640, y: 404, role: "Output bit", signal: "Weight 2^4", polynomial: "p4 - v2*c2 = 0", stageNote: "Top carry output." }
+      { id: "a0", label: "a0", type: "input", x: 76, y: 66, role: "Primary input", signal: "Bit a0", polynomial: "a0 - a0 = 0" },
+      { id: "a1", label: "a1", type: "input", x: 76, y: 134, role: "Primary input", signal: "Bit a1", polynomial: "a1 - a1 = 0" },
+      { id: "a2", label: "a2", type: "input", x: 76, y: 202, role: "Primary input", signal: "Bit a2", polynomial: "a2 - a2 = 0" },
+      { id: "b0", label: "b0", type: "input", x: 76, y: 286, role: "Primary input", signal: "Bit b0", polynomial: "b0 - b0 = 0" },
+      { id: "b1", label: "b1", type: "input", x: 76, y: 354, role: "Primary input", signal: "Bit b1", polynomial: "b1 - b1 = 0" },
+      { id: "n1", label: "u0", type: "and", x: 224, y: 60, role: "Partial product", signal: "a0 AND b0", polynomial: "u0 - a0*b0 = 0" },
+      { id: "n2", label: "u1", type: "and", x: 224, y: 126, role: "Partial product", signal: "a1 AND b0", polynomial: "u1 - a1*b0 = 0" },
+      { id: "n3", label: "u2", type: "and", x: 224, y: 192, role: "Partial product", signal: "a2 AND b0", polynomial: "u2 - a2*b0 = 0" },
+      { id: "n4", label: "v0", type: "and", x: 224, y: 272, role: "Partial product", signal: "a0 AND b1", polynomial: "v0 - a0*b1 = 0" },
+      { id: "n5", label: "v1", type: "and", x: 224, y: 338, role: "Partial product", signal: "a1 AND b1", polynomial: "v1 - a1*b1 = 0" },
+      { id: "n6", label: "v2", type: "and", x: 224, y: 404, role: "Partial product", signal: "a2 AND b1", polynomial: "v2 - a2*b1 = 0" },
+      { id: "s1", label: "s1", type: "and", x: 404, y: 126, role: "Weight-1 sum", signal: "support for u1 and v0", polynomial: "s1 - (u1 + v0 - 2*u1*v0) = 0" },
+      { id: "c1", label: "c1", type: "and", x: 404, y: 214, role: "Weight-1 carry", signal: "carry from u1 and v0", polynomial: "c1 - u1*v0 = 0" },
+      { id: "s2", label: "s2", type: "and", x: 404, y: 300, role: "Weight-2 sum", signal: "support for u2, v1, c1", polynomial: "s2 - (u2 + v1 + c1 - 2*u2*v1 - 2*u2*c1 - 2*v1*c1 + 4*u2*v1*c1) = 0" },
+      { id: "c2", label: "c2", type: "and", x: 404, y: 388, role: "Weight-2 carry", signal: "carry support into top weight", polynomial: "c2 - (u2*v1 + u2*c1 + v1*c1 - 2*u2*v1*c1) = 0" },
+      { id: "p0", label: "p0", type: "output", x: 640, y: 64, role: "Output bit", signal: "Weight 2^0", polynomial: "p0 - u0 = 0" },
+      { id: "p1", label: "p1", type: "output", x: 640, y: 140, role: "Output bit", signal: "Weight 2^1", polynomial: "p1 - s1 = 0" },
+      { id: "p2", label: "p2", type: "output", x: 640, y: 244, role: "Output bit", signal: "Weight 2^2", polynomial: "p2 - s2 = 0" },
+      { id: "p3", label: "p3", type: "output", x: 640, y: 334, role: "Output bit", signal: "Weight 2^3", polynomial: "p3 - (v2 + c2 - 2*v2*c2) = 0" },
+      { id: "p4", label: "p4", type: "output", x: 640, y: 404, role: "Output bit", signal: "Weight 2^4", polynomial: "p4 - v2*c2 = 0" }
     ],
     edges: [
       { from: "a0", to: "n1" },
@@ -309,7 +309,6 @@ const nodePolynomial = document.querySelector("#nodePolynomial");
 const nodeSignal = document.querySelector("#nodeSignal");
 const nodeParents = document.querySelector("#nodeParents");
 const nodeChildren = document.querySelector("#nodeChildren");
-const nodeStageNote = document.querySelector("#nodeStageNote");
 const nodeInspector = document.querySelector("#nodeInspector");
 const zoomOut = document.querySelector("#zoomOut");
 const zoomIn = document.querySelector("#zoomIn");
@@ -380,7 +379,7 @@ function currentMicroStepLimit() {
   return Math.max(0, Math.min(total, state.microStepIndex));
 }
 
-let overlayCache = { exampleIndex: null, stageIndex: null, microStepLimit: null, overlay: null };
+let overlayCache = { example: null, stageIndex: null, microStepLimit: null, overlay: null };
 
 // Reduction-phase stages (Remove internal xor gates / Eliminate
 // single-occurrence nodes / Remove gates without a slice) don't carry a full
@@ -443,14 +442,20 @@ function computeOverlayForStage(stageIndex, microLimit) {
   return {
     dimmedNodes: [...dimmed],
     rootUpdates: [...live.entries()].map(([nodeId, expression]) => ({ nodeId, expression })),
-    edges
+    edges,
+    // The same data as lookup structures, shared read-only by every caller.
+    dimmedSet: dimmed,
+    rootUpdatesMap: live
   };
 }
 
+// Keyed on the example object rather than its index: a circuit's entry is
+// swapped from its manifest stub to the full data once it has been fetched.
 function currentOverlay() {
   const microLimit = currentMicroStepLimit();
+  const example = currentExample();
   if (
-    overlayCache.exampleIndex === state.exampleIndex &&
+    overlayCache.example === example &&
     overlayCache.stageIndex === state.stageIndex &&
     overlayCache.microStepLimit === microLimit
   ) {
@@ -458,7 +463,7 @@ function currentOverlay() {
   }
 
   const overlay = computeOverlayForStage(state.stageIndex, microLimit);
-  overlayCache = { exampleIndex: state.exampleIndex, stageIndex: state.stageIndex, microStepLimit: microLimit, overlay };
+  overlayCache = { example, stageIndex: state.stageIndex, microStepLimit: microLimit, overlay };
   return overlay;
 }
 
@@ -473,13 +478,15 @@ function finalOverlay() {
   return computeOverlayForStage(lastIndex, microSteps.length);
 }
 
+// Shared, read-only - these used to be rebuilt on every call, including once
+// per graph node, which made a render O(n^2) and froze the page on the
+// 48k-node sp-ar-rc-64.
 function currentStageDimmedSet() {
-  return new Set(currentOverlay().dimmedNodes);
+  return currentOverlay().dimmedSet;
 }
 
 function currentStageRootUpdatesMap() {
-  const updates = currentOverlay().rootUpdates;
-  return new Map(updates.map((update) => [update.nodeId, update.expression]));
+  return currentOverlay().rootUpdatesMap;
 }
 
 // Slices are only meaningful in the "Initialize slices" stage, and only
@@ -511,6 +518,14 @@ function ensureSliceSelection() {
   }
 }
 
+// One shared collator: localeCompare with options builds a new one on every
+// call, which made sorting the ~48k polynomials of sp-ar-rc-64 take seconds.
+const labelCollator = new Intl.Collator(undefined, { numeric: true });
+
+function compareLabels(left, right) {
+  return labelCollator.compare(left, right);
+}
+
 function escapeHtml(value) {
   return value
     .replaceAll("&", "&amp;")
@@ -528,31 +543,98 @@ function shouldAppendStagePolynomials(stage) {
   return !STAGE_NAMES_WITHOUT_EXTRA_EQUATIONS.has(stage.name);
 }
 
+const EXAMPLES_MANIFEST_URL = "./data/generated/examples.json";
+
+// examples.json is a manifest of {id, label, title, nodeCount, file} entries;
+// each circuit's data lives in its own file and is fetched the first time it
+// is selected, so the page doesn't download sp-ar-rc-64 (~49 MB) up front.
+// A manifest entry is replaced by the full example once it has loaded.
+function isExampleLoaded(example) {
+  return Array.isArray(example?.stages);
+}
+
+const exampleRequests = new Map();
+
+function loadExample(index, list = examples) {
+  const entry = list[index];
+  if (isExampleLoaded(entry)) {
+    return Promise.resolve(entry);
+  }
+  if (!exampleRequests.has(index)) {
+    const url = new URL(entry.file, new URL(EXAMPLES_MANIFEST_URL, document.baseURI));
+    const request = fetch(url)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        list[index] = normalizeExample(data);
+        return list[index];
+      })
+      .finally(() => exampleRequests.delete(index));
+    exampleRequests.set(index, request);
+  }
+  return exampleRequests.get(index);
+}
+
+// The circuit whose data is being fetched after a click, if any. Only the
+// most recent click wins when several are in flight.
+let pendingExampleIndex = null;
+
+async function selectExample(index) {
+  pendingExampleIndex = index;
+  buildExamplePicker();
+  try {
+    await loadExample(index);
+  } catch (error) {
+    if (pendingExampleIndex === index) {
+      pendingExampleIndex = null;
+      buildExamplePicker();
+      exampleDescription.textContent = `Could not load ${examples[index].label} (${error.message}).`;
+    }
+    return;
+  }
+  if (pendingExampleIndex !== index) {
+    return;
+  }
+  pendingExampleIndex = null;
+  state.exampleIndex = index;
+  state.stageIndex = 0;
+  state.microStepIndex = null;
+  state.activeNodeId = null;
+  state.zoom = null;
+  state.specStepIndex = 0;
+  ensureSliceSelection();
+  render();
+}
+
 function buildExamplePicker() {
   examplePicker.innerHTML = examples
-    .map(
-      (example, index) => `
+    .map((example, index) => {
+      const isLoading = index === pendingExampleIndex;
+      const classes = ["pill-button", index === state.exampleIndex ? "active" : "", isLoading ? "loading" : ""]
+        .filter(Boolean)
+        .join(" ");
+      const nodeCount = example.nodeCount ?? example.nodes?.length;
+      const title = nodeCount ? ` title="${nodeCount.toLocaleString("en-US")} nodes"` : "";
+      return `
         <button
-          class="pill-button ${index === state.exampleIndex ? "active" : ""}"
+          class="${classes}"
           type="button"
-          data-example-index="${index}"
+          data-example-index="${index}"${title}
+          ${isLoading ? 'aria-busy="true"' : ""}
         >
-          ${escapeHtml(example.label)}
+          ${escapeHtml(example.label)}${isLoading ? " &hellip;" : ""}
         </button>
-      `
-    )
+      `;
+    })
     .join("");
 
   examplePicker.querySelectorAll("button").forEach((button) => {
     button.addEventListener("click", () => {
-      state.exampleIndex = Number(button.dataset.exampleIndex);
-      state.stageIndex = 0;
-      state.microStepIndex = null;
-      state.activeNodeId = null;
-      state.zoom = null;
-      state.specStepIndex = 0;
-      ensureSliceSelection();
-      render();
+      selectExample(Number(button.dataset.exampleIndex));
     });
   });
 }
@@ -591,32 +673,77 @@ function buildPhaseTabs() {
   });
 }
 
-function visibleNodeIds() {
-  if (state.viewMode !== "slice") {
-    return new Set(activeNodes().map((node) => node.id));
+let graphViewCache = null;
+
+// The visible nodes/edges for the current example, stage and view mode, plus
+// each node's parent/child edges. Hovering reads parents/children on every
+// node change, so this is computed once per state instead of filtering every
+// edge per hover (~96k edges on sp-ar-rc-64).
+function currentGraphView() {
+  const example = currentExample();
+  const overlay = currentOverlay();
+  if (state.viewMode === "slice") {
+    ensureSliceSelection();
+  }
+  const cached = graphViewCache;
+  if (
+    cached &&
+    cached.example === example &&
+    cached.overlay === overlay &&
+    cached.viewMode === state.viewMode &&
+    cached.sliceIndex === state.sliceIndex
+  ) {
+    return cached;
   }
 
-  ensureSliceSelection();
-  const activeSlice = state.sliceIndex;
-  return new Set(
-    activeNodes()
-      .filter((node) => node.type === "input" || node.slice === activeSlice)
-      .map((node) => node.id)
-  );
+  const nodes =
+    state.viewMode === "slice"
+      ? example.nodes.filter((node) => node.type === "input" || node.slice === state.sliceIndex)
+      : example.nodes;
+  const ids = new Set(nodes.map((node) => node.id));
+  const edges = activeEdges().filter((edge) => ids.has(edge.from) && ids.has(edge.to));
+  const parents = new Map();
+  const children = new Map();
+  edges.forEach((edge) => {
+    if (!children.has(edge.from)) {
+      children.set(edge.from, []);
+    }
+    children.get(edge.from).push(edge);
+    if (!parents.has(edge.to)) {
+      parents.set(edge.to, []);
+    }
+    parents.get(edge.to).push(edge);
+  });
+
+  graphViewCache = {
+    example,
+    overlay,
+    viewMode: state.viewMode,
+    sliceIndex: state.sliceIndex,
+    ids,
+    nodes,
+    edges,
+    parents,
+    children
+  };
+  return graphViewCache;
+}
+
+function visibleNodeIds() {
+  return currentGraphView().ids;
 }
 
 function visibleNodes() {
-  const ids = visibleNodeIds();
-  return activeNodes().filter((node) => ids.has(node.id));
+  return currentGraphView().nodes;
 }
 
 function visibleEdges() {
-  const ids = visibleNodeIds();
-  return activeEdges().filter((edge) => ids.has(edge.from) && ids.has(edge.to));
+  return currentGraphView().edges;
 }
 
 function compactSliceNodes(nodes, edges) {
   const levelById = new Map();
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const outgoing = new Map(nodes.map((node) => [node.id, []]));
   const incomingCount = new Map(nodes.map((node) => [node.id, 0]));
 
@@ -627,19 +754,19 @@ function compactSliceNodes(nodes, edges) {
 
   const queue = nodes
     .filter((node) => (incomingCount.get(node.id) ?? 0) === 0)
-    .sort((left, right) => left.label.localeCompare(right.label, undefined, { numeric: true }));
+    .sort((left, right) => compareLabels(left.label, right.label));
 
   queue.forEach((node) => levelById.set(node.id, 0));
 
-  while (queue.length) {
-    const node = queue.shift();
+  for (let head = 0; head < queue.length; head += 1) {
+    const node = queue[head];
     const level = levelById.get(node.id) ?? 0;
     (outgoing.get(node.id) ?? []).forEach((childId) => {
       const nextLevel = level + 1;
       levelById.set(childId, Math.max(levelById.get(childId) ?? 0, nextLevel));
       incomingCount.set(childId, (incomingCount.get(childId) ?? 1) - 1);
       if ((incomingCount.get(childId) ?? 0) === 0) {
-        const childNode = nodes.find((candidate) => candidate.id === childId);
+        const childNode = nodeById.get(childId);
         if (childNode) {
           queue.push(childNode);
         }
@@ -659,7 +786,7 @@ function compactSliceNodes(nodes, edges) {
   const laidOut = [];
   const sortedLevels = [...layers.keys()].sort((left, right) => left - right);
   sortedLevels.forEach((level) => {
-    const layer = layers.get(level).sort((left, right) => left.label.localeCompare(right.label, undefined, { numeric: true }));
+    const layer = layers.get(level).sort((left, right) => compareLabels(left.label, right.label));
     const baseX = 80;
     const spacingX = 92;
     const y = 70 + level * 110;
@@ -822,7 +949,7 @@ function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials, opti
 
   const polynomialNodes = activeNodes()
     .filter((node) => !dimmedNodes.has(node.id) && node.type !== "input")
-    .sort((left, right) => left.label.localeCompare(right.label, undefined, { numeric: true }));
+    .sort((left, right) => compareLabels(left.label, right.label));
 
   polynomialNodes.forEach((node) => {
     const isRewritten = rootUpdates.has(node.id);
@@ -869,7 +996,7 @@ function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials, opti
       if (leftSlice !== rightSlice) {
         return rightSlice - leftSlice;
       }
-      return right.label.localeCompare(left.label, undefined, { numeric: true });
+      return compareLabels(right.label, left.label);
     });
   } else if (decreasing) {
     entries.reverse();
@@ -901,7 +1028,10 @@ function renderPolynomialEntries(title, entries, options = {}) {
 
   polynomialList.innerHTML = rows.join("");
 
-  bindPolynomialInteractions();
+  polyDom = { elements: new Map(), highlightedNodeId: null };
+  polynomialList.querySelectorAll("[data-poly-node-id]").forEach((element) => {
+    polyDom.elements.set(element.dataset.polyNodeId, element);
+  });
 }
 
 function renderPolynomialList() {
@@ -934,62 +1064,96 @@ function renderFinalPolynomialList() {
   renderPolynomialEntries("Complete preprocessed set", entries, { showSliceGroups: true });
 }
 
-function bindPolynomialInteractions() {
-  polynomialList.querySelectorAll("[data-poly-node-id]").forEach((element) => {
-    const { polyNodeId } = element.dataset;
+// Row elements of the rendered polynomial list by node id, and which one
+// currently carries the hover highlight, so a hover touches two rows instead
+// of every row.
+let polyDom = { elements: new Map(), highlightedNodeId: null };
 
-    const activate = () => {
-      state.activeNodeId = polyNodeId;
-      updateGraphHighlight();
-      renderInspector();
-    };
-
-    const clear = () => {
-      state.activeNodeId = null;
-      updateGraphHighlight();
-      renderInspector();
-    };
-
-    element.addEventListener("mouseenter", activate);
-    element.addEventListener("focus", activate);
-    element.addEventListener("mouseleave", clear);
-    element.addEventListener("blur", clear);
-    element.addEventListener("click", activate);
-    element.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        activate();
-      }
-      if (event.key === "Escape") {
-        clear();
-      }
-    });
-  });
+function setActiveNode(nodeId) {
+  if (state.activeNodeId === nodeId) {
+    return;
+  }
+  state.activeNodeId = nodeId;
+  updateGraphHighlight();
+  renderInspector();
 }
 
+// One set of delegated listeners for the whole list instead of six per row
+// (tens of thousands of rows on the large circuits). Same behavior as the
+// old per-row mouseenter/mouseleave/focus/blur/click/keydown handlers.
+function polynomialRowOf(target) {
+  return target instanceof Element ? target.closest("[data-poly-node-id]") : null;
+}
+
+polynomialList.addEventListener("mouseover", (event) => {
+  const row = polynomialRowOf(event.target);
+  if (row) {
+    setActiveNode(row.dataset.polyNodeId);
+  }
+});
+polynomialList.addEventListener("mouseout", (event) => {
+  const row = polynomialRowOf(event.target);
+  if (row && !row.contains(event.relatedTarget)) {
+    setActiveNode(null);
+  }
+});
+polynomialList.addEventListener("focusin", (event) => {
+  const row = polynomialRowOf(event.target);
+  if (row) {
+    setActiveNode(row.dataset.polyNodeId);
+  }
+});
+polynomialList.addEventListener("focusout", (event) => {
+  if (polynomialRowOf(event.target)) {
+    setActiveNode(null);
+  }
+});
+polynomialList.addEventListener("click", (event) => {
+  const row = polynomialRowOf(event.target);
+  if (row) {
+    setActiveNode(row.dataset.polyNodeId);
+  }
+});
+polynomialList.addEventListener("keydown", (event) => {
+  const row = polynomialRowOf(event.target);
+  if (!row) {
+    return;
+  }
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    setActiveNode(row.dataset.polyNodeId);
+  }
+  if (event.key === "Escape") {
+    setActiveNode(null);
+  }
+});
+
+const nodeMapCache = new WeakMap();
+
 function nodeMap() {
-  return new Map(activeNodes().map((node) => [node.id, node]));
+  const example = currentExample();
+  if (!nodeMapCache.has(example)) {
+    nodeMapCache.set(example, new Map(example.nodes.map((node) => [node.id, node])));
+  }
+  return nodeMapCache.get(example);
 }
 
 function nodeParentsFor(nodeId) {
   const map = nodeMap();
-  return visibleEdges()
-    .filter((edge) => edge.to === nodeId)
-    .map((edge) => map.get(edge.from)?.label || edge.from);
+  return (currentGraphView().parents.get(nodeId) ?? []).map((edge) => map.get(edge.from)?.label || edge.from);
 }
 
 function nodeChildrenFor(nodeId) {
   const map = nodeMap();
-  return visibleEdges()
-    .filter((edge) => edge.from === nodeId)
-    .map((edge) => `${edge.inverted ? "!" : ""}${map.get(edge.to)?.label || edge.to}`);
+  return (currentGraphView().children.get(nodeId) ?? []).map(
+    (edge) => `${edge.inverted ? "!" : ""}${map.get(edge.to)?.label || edge.to}`
+  );
 }
 
 function renderInspector() {
   const example = currentExample();
-  const activeNode = activeNodes().find((node) => node.id === state.activeNodeId);
+  const activeNode = state.activeNodeId === null ? undefined : nodeMap().get(state.activeNodeId);
   const rootUpdates = currentStageRootUpdatesMap();
-  const dimmedNodes = currentStageDimmedSet();
 
   if (!activeNode) {
     nodeInspector.classList.add("is-empty");
@@ -1002,7 +1166,6 @@ function renderInspector() {
     nodeSignal.textContent = "-";
     nodeParents.textContent = "-";
     nodeChildren.textContent = "-";
-    nodeStageNote.textContent = currentStage().summary;
     return;
   }
 
@@ -1017,22 +1180,6 @@ function renderInspector() {
   nodeSignal.textContent = activeNode.signal;
   nodeParents.textContent = parents.length ? parents.join(", ") : "primary source";
   nodeChildren.textContent = children.length ? children.join(", ") : "leaf output";
-  const sliceValue = hoveredSliceValue();
-  if (sliceValue !== null && activeNode.type === "output") {
-    const members = activeNodes()
-      .filter((node) => node.slice === sliceValue && node.id !== activeNode.id)
-      .map((node) => node.label)
-      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-    nodeStageNote.textContent = members.length
-      ? `Slice ${sliceValue} also includes: ${members.join(", ")}.`
-      : `Slice ${sliceValue} has no other supporting nodes.`;
-  } else if (dimmedNodes.has(activeNode.id)) {
-    nodeStageNote.textContent = "Eliminated/decomposed at this stage and rendered faded in the graph.";
-  } else if (stagePolynomial) {
-    nodeStageNote.textContent = "Root polynomial updated by the active rewrite step.";
-  } else {
-    nodeStageNote.textContent = activeNode.stageNote;
-  }
 }
 
 function renderHeader() {
@@ -1062,10 +1209,10 @@ function edgeClassNames(edge, map, sliceValue) {
   return classes.join(" ");
 }
 
-function nodeMarkup(node, sliceValue) {
+function nodeMarkup(node, sliceValue, dimmedNodes, rootUpdates, showLabels) {
   const isActive = node.id === state.activeNodeId;
-  const isDimmed = currentStageDimmedSet().has(node.id);
-  const isRootUpdated = currentStageRootUpdatesMap().has(node.id);
+  const isDimmed = dimmedNodes.has(node.id);
+  const isRootUpdated = rootUpdates.has(node.id);
   const isSliceMember = sliceValue !== null && node.slice === sliceValue;
   const isSliceFocus = isSliceMember && !isActive;
   const isSliceDim = sliceValue !== null && !isSliceMember && !isActive;
@@ -1082,8 +1229,8 @@ function nodeMarkup(node, sliceValue) {
     .join(" ");
   const width = node.width ?? (node.type === "output" ? 60 : 48);
   const height = node.height ?? 36;
-  const label = escapeHtml(node.label);
   const ariaLabel = escapeHtml(node.label);
+  const labelMarkup = (y) => (showLabels ? `<text y="${y}">${ariaLabel}</text>` : "");
   const shape = node.shape ?? (node.type === "output" ? "rect" : "circle");
 
   if (shape === "triangle") {
@@ -1092,7 +1239,7 @@ function nodeMarkup(node, sliceValue) {
     return `
       <g class="${classes}" data-node-id="${node.id}" tabindex="0" role="button" aria-label="${ariaLabel}" transform="translate(${node.x}, ${node.y})">
         <polygon points="0,${-halfHeight} ${halfWidth},${halfHeight} ${-halfWidth},${halfHeight}"></polygon>
-        <text y="6">${label}</text>
+        ${labelMarkup(6)}
       </g>
     `;
   }
@@ -1101,7 +1248,7 @@ function nodeMarkup(node, sliceValue) {
     return `
       <g class="${classes}" data-node-id="${node.id}" tabindex="0" role="button" aria-label="${ariaLabel}" transform="translate(${node.x}, ${node.y})">
         <rect x="${-width / 2}" y="${-height / 2}" width="${width}" height="${height}"></rect>
-        <text y="1">${label}</text>
+        ${labelMarkup(1)}
       </g>
     `;
   }
@@ -1109,37 +1256,46 @@ function nodeMarkup(node, sliceValue) {
   return `
     <g class="${classes}" data-node-id="${node.id}" tabindex="0" role="button" aria-label="${ariaLabel}" transform="translate(${node.x}, ${node.y})">
       <ellipse rx="${width / 2}" ry="${height / 2}"></ellipse>
-      <text y="1">${label}</text>
+      ${labelMarkup(1)}
     </g>
   `;
 }
 
-function bindGraphInteractions() {
-  graphElement.querySelectorAll("[data-node-id]").forEach((element) => {
-    const { nodeId } = element.dataset;
-
-    const focusNode = () => {
-      state.activeNodeId = nodeId;
-      updateGraphHighlight();
-      renderInspector();
-    };
-
-    element.addEventListener("mouseenter", focusNode);
-    element.addEventListener("focus", focusNode);
-    element.addEventListener("click", focusNode);
-    element.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        focusNode();
-      }
-    });
-  });
+// Delegated from the <svg> rather than bound per node: the graph is rebuilt
+// on every render, and re-binding four listeners on each of 48k nodes was a
+// large share of a render on sp-ar-rc-64.
+function graphNodeOf(target) {
+  return target instanceof Element ? target.closest("[data-node-id]") : null;
 }
 
+graphElement.addEventListener("mouseover", (event) => {
+  const element = graphNodeOf(event.target);
+  if (element) {
+    setActiveNode(element.dataset.nodeId);
+  }
+});
+graphElement.addEventListener("focusin", (event) => {
+  const element = graphNodeOf(event.target);
+  if (element) {
+    setActiveNode(element.dataset.nodeId);
+  }
+});
+graphElement.addEventListener("click", (event) => {
+  const element = graphNodeOf(event.target);
+  if (element) {
+    setActiveNode(element.dataset.nodeId);
+  }
+});
+graphElement.addEventListener("keydown", (event) => {
+  const element = graphNodeOf(event.target);
+  if (element && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    setActiveNode(element.dataset.nodeId);
+  }
+});
+
 graphElement.addEventListener("mouseleave", () => {
-  state.activeNodeId = null;
-  updateGraphHighlight();
-  renderInspector();
+  setActiveNode(null);
 });
 
 function edgePath(edge, map, useStoredPoints = true) {
@@ -1206,21 +1362,43 @@ function currentGraphSize() {
   };
 }
 
+// Above this many visible nodes, node labels are only drawn from
+// LABEL_MIN_ZOOM up: below it they are a few pixels tall and unreadable, and
+// leaving them out spares the browser tens of thousands of <text> elements
+// on the large circuits. Zooming re-renders the graph, so they come back as
+// soon as they are legible.
+const LABEL_NODE_LIMIT = 5000;
+const LABEL_MIN_ZOOM = 0.5;
+
+function fitZoom() {
+  const graphSize = currentGraphSize();
+  const availableWidth = Math.max(260, graphCard.clientWidth - 24);
+  const availableHeight = Math.max(220, graphCard.clientHeight - 24);
+  return Math.min(availableWidth / graphSize.width, availableHeight / graphSize.height, 1) * 0.98;
+}
+
 function ensureZoomInitialized() {
   if (typeof state.zoom === "number") {
     return;
   }
 
-  const graphSize = currentGraphSize();
-  const availableWidth = Math.max(260, graphCard.clientWidth - 24);
-  const availableHeight = Math.max(220, graphCard.clientHeight - 24);
-  const fit = Math.min(availableWidth / graphSize.width, availableHeight / graphSize.height, 1);
-  state.zoom = Math.max(0.2, fit * 0.98);
+  state.zoom = Math.max(0.2, fitZoom());
 }
+
+// The rendered graph's elements, indexed so a hover can restyle just the
+// nodes and edges whose highlight changes (see updateGraphHighlight).
+let graphDom = {
+  example: null,
+  nodeElements: new Map(),
+  edgeElements: [],
+  edgeIndexesByNode: new Map(),
+  edges: [],
+  highlightedNodeId: null,
+  sliceValue: null
+};
 
 function renderGraph() {
   const example = currentExample();
-  const sourceMap = nodeMap();
   const baseNodes = visibleNodes();
   const edges = visibleEdges();
   const useStoredPoints = state.viewMode === "full";
@@ -1248,7 +1426,10 @@ function renderGraph() {
     })
     .join("");
 
-  const nodeLayer = nodes.map((node) => nodeMarkup(node, sliceValue)).join("");
+  const dimmedNodes = currentStageDimmedSet();
+  const rootUpdates = currentStageRootUpdatesMap();
+  const showLabels = nodes.length <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
+  const nodeLayer = nodes.map((node) => nodeMarkup(node, sliceValue, dimmedNodes, rootUpdates, showLabels)).join("");
 
   graphElement.innerHTML = `
     <defs>
@@ -1260,7 +1441,29 @@ function renderGraph() {
     <g class="node-layer">${nodeLayer}</g>
   `;
 
-  bindGraphInteractions();
+  const nodeElements = new Map();
+  graphElement.querySelectorAll("[data-node-id]").forEach((element) => {
+    nodeElements.set(element.dataset.nodeId, element);
+  });
+  const edgeIndexesByNode = new Map();
+  edges.forEach((edge, index) => {
+    [edge.from, edge.to].forEach((nodeId) => {
+      if (!edgeIndexesByNode.has(nodeId)) {
+        edgeIndexesByNode.set(nodeId, []);
+      }
+      edgeIndexesByNode.get(nodeId).push(index);
+    });
+  });
+  graphDom = {
+    example,
+    nodeElements,
+    // querySelectorAll returns document order, which is the edges' index order.
+    edgeElements: [...graphElement.querySelectorAll("[data-edge-index]")],
+    edgeIndexesByNode,
+    edges,
+    highlightedNodeId: state.activeNodeId,
+    sliceValue
+  };
 
   if (state.viewMode === "slice") {
     graphCard.scrollTop = 0;
@@ -1268,37 +1471,64 @@ function renderGraph() {
   }
 }
 
+function styleGraphNodeElement(element, nodeId, map, sliceValue) {
+  const isActive = nodeId === state.activeNodeId;
+  const isSliceMember = sliceValue !== null && map.get(nodeId)?.slice === sliceValue;
+  element.classList.toggle("active", isActive);
+  element.classList.toggle("slice-focus", isSliceMember && !isActive);
+  element.classList.toggle("slice-dim", sliceValue !== null && !isSliceMember && !isActive);
+}
+
+function styleGraphEdgeElement(element, edge, map, sliceValue) {
+  const isActive = state.activeNodeId && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
+  const isSliceMember =
+    sliceValue !== null && map.get(edge.from)?.slice === sliceValue && map.get(edge.to)?.slice === sliceValue;
+  element.classList.toggle("active", Boolean(isActive));
+  element.classList.toggle("slice-focus", Boolean(!isActive && isSliceMember));
+  element.classList.toggle("slice-dim", Boolean(!isActive && sliceValue !== null && !isSliceMember));
+}
+
+// Only restyles what changed. A plain hover changes the highlight of two
+// nodes and their edges, so only those are touched (it used to restyle every
+// node and look each edge up with its own querySelector - quadratic in the
+// edge count). Hovering into or out of an output in the "Initialize slices"
+// stage changes the slice focus of the whole graph, so that case still
+// restyles everything.
 function updateGraphHighlight() {
-  const edges = visibleEdges();
   const map = nodeMap();
   const sliceValue = hoveredSliceValue();
 
-  graphElement.querySelectorAll("[data-node-id]").forEach((element) => {
-    const { nodeId } = element.dataset;
-    const isActive = nodeId === state.activeNodeId;
-    const isSliceMember = sliceValue !== null && map.get(nodeId)?.slice === sliceValue;
-    element.classList.toggle("active", isActive);
-    element.classList.toggle("slice-focus", isSliceMember && !isActive);
-    element.classList.toggle("slice-dim", sliceValue !== null && !isSliceMember && !isActive);
-  });
+  if (graphDom.example === currentExample()) {
+    const restyleNode = (nodeId) => {
+      const element = nodeId === null ? null : graphDom.nodeElements.get(nodeId);
+      if (element) {
+        styleGraphNodeElement(element, nodeId, map, sliceValue);
+      }
+      (graphDom.edgeIndexesByNode.get(nodeId) ?? []).forEach((index) => {
+        styleGraphEdgeElement(graphDom.edgeElements[index], graphDom.edges[index], map, sliceValue);
+      });
+    };
 
-  edges.forEach((edge, index) => {
-    const edgeElement = graphElement.querySelector(`[data-edge-index="${index}"]`);
-    const isActive = state.activeNodeId && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
-    const isSliceMember =
-      sliceValue !== null && map.get(edge.from)?.slice === sliceValue && map.get(edge.to)?.slice === sliceValue;
-    edgeElement?.classList.toggle("active", Boolean(isActive));
-    edgeElement?.classList.toggle("slice-focus", Boolean(!isActive && isSliceMember));
-    edgeElement?.classList.toggle("slice-dim", Boolean(!isActive && sliceValue !== null && !isSliceMember));
-  });
-
-  polynomialList.querySelectorAll("[data-poly-node-id]").forEach((element) => {
-    const isActive = element.dataset.polyNodeId === state.activeNodeId;
-    element.classList.toggle("active-link", isActive);
-    if (isActive) {
-      element.scrollIntoView({ block: "nearest" });
+    if (sliceValue !== graphDom.sliceValue) {
+      graphDom.nodeElements.forEach((element, nodeId) => styleGraphNodeElement(element, nodeId, map, sliceValue));
+      graphDom.edges.forEach((edge, index) => styleGraphEdgeElement(graphDom.edgeElements[index], edge, map, sliceValue));
+    } else if (graphDom.highlightedNodeId !== state.activeNodeId) {
+      restyleNode(graphDom.highlightedNodeId);
+      restyleNode(state.activeNodeId);
     }
-  });
+    graphDom.highlightedNodeId = state.activeNodeId;
+    graphDom.sliceValue = sliceValue;
+  }
+
+  if (polyDom.highlightedNodeId !== state.activeNodeId) {
+    polyDom.elements.get(polyDom.highlightedNodeId)?.classList.remove("active-link");
+    const row = polyDom.elements.get(state.activeNodeId);
+    if (row) {
+      row.classList.add("active-link");
+      row.scrollIntoView({ block: "nearest" });
+    }
+    polyDom.highlightedNodeId = state.activeNodeId;
+  }
 }
 
 function renderSpecStepEntry(step) {
@@ -1362,6 +1592,7 @@ function renderSpecView() {
   if (!spec) {
     specPolynomial.textContent = "No specification data available for this example.";
     specStepLog.innerHTML = "";
+    specLogDom = { spec: null, shownSteps: 0 };
     specStepLabel.textContent = "0 / 0";
     specStepBack.disabled = true;
     specStepForward.disabled = true;
@@ -1379,25 +1610,55 @@ function renderSpecView() {
   specSliceBack.disabled = state.specStepIndex === 0;
   specSliceForward.disabled = state.specStepIndex === totalSteps;
 
-  const revealedSteps = spec.steps.slice(0, state.specStepIndex);
-  specStepLabel.textContent = `${countRewriteSteps(revealedSteps)} / ${countRewriteSteps(spec.steps)}`;
+  specStepLabel.textContent = `${countRewriteSteps(spec.steps.slice(0, state.specStepIndex))} / ${countRewriteSteps(spec.steps)}`;
 
-  const logMarkup = revealedSteps.map(renderSpecStepEntry).join("");
-  const resultMarkup =
-    state.specStepIndex === totalSteps && totalSteps > 0
-      ? `<div class="spec-log-entry spec-log-result">${escapeHtml(spec.result ?? "")}</div>`
-      : "";
-
-  specStepLog.innerHTML =
-    logMarkup ||
-    `<p class="muted-copy">Step forward to reduce the specification polynomial by each remaining gate constraint, slice by slice, until the remainder collapses to zero.</p>`;
-  specStepLog.insertAdjacentHTML("beforeend", resultMarkup);
+  renderSpecStepLog(spec);
   const scrollContainer = specStepLog.closest(".graph-card") ?? specStepLog;
   scrollContainer.scrollTop = scrollContainer.scrollHeight;
 }
 
+// What the step log currently shows: which specification and how many of its
+// steps. Each step is one `display: contents` group (layout-neutral), so
+// stepping forward appends groups and stepping back removes the last ones
+// instead of re-rendering the whole log - on sp-ar-rc-64 the full log is
+// ~8k steps and ~18 MB of polynomial text.
+let specLogDom = { spec: null, shownSteps: 0 };
+
+function renderSpecStepLog(spec) {
+  const target = state.specStepIndex;
+  const totalSteps = spec.steps.length;
+
+  specStepLog.querySelector(":scope > .spec-log-result")?.remove();
+  if (specLogDom.spec !== spec || target === 0 || specLogDom.shownSteps === 0) {
+    specStepLog.innerHTML = "";
+    specLogDom = { spec, shownSteps: 0 };
+  }
+
+  while (specLogDom.shownSteps > target) {
+    specStepLog.lastElementChild?.remove();
+    specLogDom.shownSteps -= 1;
+  }
+  if (specLogDom.shownSteps < target) {
+    const groups = spec.steps
+      .slice(specLogDom.shownSteps, target)
+      .map((step) => `<div class="spec-log-step-group">${renderSpecStepEntry(step)}</div>`)
+      .join("");
+    specStepLog.insertAdjacentHTML("beforeend", groups);
+    specLogDom.shownSteps = target;
+  }
+
+  if (target === 0) {
+    specStepLog.innerHTML = `<p class="muted-copy">Step forward to reduce the specification polynomial by each remaining gate constraint, slice by slice, until the remainder collapses to zero.</p>`;
+  } else if (target === totalSteps) {
+    specStepLog.insertAdjacentHTML(
+      "beforeend",
+      `<div class="spec-log-entry spec-log-result">${escapeHtml(spec.result ?? "")}</div>`
+    );
+  }
+}
+
 function render() {
-  if (!examples.length) {
+  if (!examples.length || !isExampleLoaded(currentExample())) {
     return;
   }
 
@@ -1430,7 +1691,9 @@ function render() {
 
 zoomOut.addEventListener("click", () => {
   ensureZoomInitialized();
-  state.zoom = Math.max(0.45, state.zoom - 0.15);
+  // Large graphs start below 0.45, so the floor drops to whatever fits the
+  // whole graph in the card (zooming out used to jump back *in* to 0.45).
+  state.zoom = Math.max(Math.min(0.45, Math.max(0.05, fitZoom())), state.zoom - 0.15);
   renderGraphToolbar();
   renderGraph();
   renderInspector();
@@ -1522,14 +1785,20 @@ document.addEventListener("keydown", (event) => {
 
 async function loadGeneratedExamples() {
   try {
-    const response = await fetch("./data/generated/examples.json", { cache: "no-store" });
+    const response = await fetch(EXAMPLES_MANIFEST_URL, { cache: "no-store" });
     if (!response.ok) {
       return;
     }
 
     const data = await response.json();
     if (Array.isArray(data) && data.length) {
-      examples = data.map(normalizeExample);
+      // Entries may be manifest stubs or (older single-file format) full
+      // examples; either way only the first circuit is needed to start.
+      // Swapped in only once the first circuit is there, so nothing ever
+      // renders (or handles a key press) against an unloaded entry.
+      const entries = data.map((entry) => (isExampleLoaded(entry) ? normalizeExample(entry) : entry));
+      await loadExample(0, entries);
+      examples = entries;
       state.exampleIndex = 0;
       state.stageIndex = 0;
       state.microStepIndex = null;

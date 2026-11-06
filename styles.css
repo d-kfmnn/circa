@@ -880,3 +880,14 @@ body::before {
     justify-content: flex-start;
   }
 }
+/* One wrapper per specification-rewrite step so the log can grow and shrink
+   step by step (see renderSpecStepLog); it adds no box of its own. */
+.spec-log-step-group {
+  display: contents;
+}
+
+/* A circuit whose data is still being fetched after its button was clicked. */
+.pill-button.loading {
+  cursor: progress;
+  opacity: 0.7;
+}
