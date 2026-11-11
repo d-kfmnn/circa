@@ -13,6 +13,15 @@
   --highlight: #f97316;
   --cut: #dc2626;
   --shadow: 0 28px 70px rgba(66, 46, 17, 0.16);
+  /* Graph node colours. The graphs are drawn on canvases, which read these
+     (graphPalette in main.js); stroke widths and opacities are set there. */
+  --node-stroke: rgba(41, 31, 16, 0.16);
+  --node-input: rgba(15, 118, 110, 0.92);
+  --node-and: rgba(255, 248, 237, 0.98);
+  --node-and-stroke: rgba(99, 72, 23, 0.35);
+  --node-output: rgba(154, 52, 18, 0.9);
+  --node-constant: rgba(88, 79, 67, 0.92);
+  --node-glow: rgba(249, 115, 22, 0.35);
 }
 
 * {
@@ -410,23 +419,31 @@ body::before {
   padding-right: 4px;
 }
 
-/* The rows, in plain block layout rather than a grid: the list has up to
-   ~48k rows (sp-ar-rc-64), and removing one re-placed every grid item, which
-   cost up to a second per step. The wrapper is as wide as the widest row's
-   longest unbreakable piece (and at least the panel), and every row
-   stretches to it - the width the grid's one column used to have. Spacing is
-   margin-bottom rather than a sibling selector, which would restyle the
-   neighbours of every removed row. */
+/* The list holds up to ~48k rows (sp-ar-rc-64), so only the rows in and
+   around view are in the DOM (renderPolynomialWindow in main.js): .poly-rows
+   is as tall as all the rows together, and .poly-window, the rows actually
+   there, is moved to where the first of them belongs. All rows are as wide
+   as the widest one's longest unbreakable piece of text, or the panel if
+   that is wider (polynomialRowWidth in main.js). Spacing is margin-bottom
+   (POLY_ROW_GAP) rather than a sibling selector, which would restyle a
+   row's neighbours whenever it comes or goes. */
 .poly-rows {
-  width: min-content;
+  position: relative;
   min-width: 100%;
 }
 
-.poly-rows > .poly-item {
+.poly-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.poly-window > .poly-item {
   margin-bottom: 8px;
 }
 
-.poly-list.compact .poly-rows > .poly-item {
+.poly-list.compact .poly-window > .poly-item {
   margin-bottom: 4px;
 }
 
@@ -664,10 +681,12 @@ body::before {
   min-width: 70px;
 }
 
+/* No padding: the margin around the graph is drawn on the canvas instead
+   (GRAPH_MARGIN in main.js), so the canvas can cover the whole visible card. */
 .graph-card {
   height: clamp(420px, 68vh, 760px);
   overflow: auto;
-  padding: 12px;
+  padding: 0;
 }
 
 /* A graph bigger than its card can be dragged around (see enablePanning). */
@@ -676,143 +695,32 @@ body::before {
   user-select: none;
 }
 
-.graph-card.panning,
-.graph-card.panning .graph-node {
+.graph-card.panning {
   cursor: grabbing;
 }
 
-/* At least as wide as the card, so the viewBox centers a narrower graph. */
-#graph,
-#specGraph {
-  display: block;
-  min-width: 100%;
+/* As big as the zoomed graph, which gives the card its scroll range. */
+.graph-surface {
+  position: relative;
 }
 
-.graph-edge {
-  fill: none;
-  stroke: var(--edge);
-  stroke-width: 2.1;
-  opacity: 0.84;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+/* The visible part of the card, where the graph is drawn (GraphCanvas in
+   main.js): it sticks to the card's top left corner while the card scrolls,
+   and is sized to the card from script. */
+.graph-viewport {
+  position: sticky;
+  top: 0;
+  left: 0;
+  overflow: hidden;
 }
 
-.graph-edge.inverted {
-  stroke-dasharray: 5 6;
-}
-
-.graph-edge.active {
-  stroke: var(--highlight);
-  opacity: 1;
-  stroke-width: 3.3;
-}
-
-.graph-node {
-  cursor: pointer;
-}
-
-.graph-node ellipse,
-.graph-node rect,
-.graph-node polygon {
-  stroke: rgba(41, 31, 16, 0.16);
-  stroke-width: 2;
-}
-
-.graph-node.input rect {
-  fill: rgba(15, 118, 110, 0.92);
-}
-
-.graph-node.and ellipse {
-  fill: rgba(255, 248, 237, 0.98);
-  stroke: rgba(99, 72, 23, 0.35);
-}
-
-.graph-node.output polygon,
-.graph-node.output rect {
-  fill: rgba(154, 52, 18, 0.9);
-}
-
-.graph-node.constant ellipse,
-.graph-node.constant rect {
-  fill: rgba(88, 79, 67, 0.92);
-}
-
-.graph-node text {
-  fill: white;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 13px;
-  text-anchor: middle;
-  dominant-baseline: middle;
-  pointer-events: none;
-}
-
-.graph-node.and text {
-  fill: var(--ink);
-}
-
-/* Faded shape by shape rather than with opacity on the node's <g>: group
-   opacity makes the browser composite every faded node on its own, and with
-   ~40k eliminated nodes on sp-ar-rc-64 that made each repaint take seconds. */
-.graph-node.dimmed > * {
-  fill-opacity: 0.2;
-  stroke-opacity: 0.2;
-}
-
-.graph-node.root-updated ellipse,
-.graph-node.root-updated rect,
-.graph-node.root-updated polygon {
-  stroke: var(--teal);
-  stroke-width: 4;
-}
-
-.graph-node.active ellipse,
-.graph-node.active rect,
-.graph-node.active polygon {
-  stroke: var(--highlight);
-  stroke-width: 4;
-  filter: drop-shadow(0 0 10px rgba(249, 115, 22, 0.35));
-}
-
-/* Specification rewrite graph: the cut and the state of each gate. */
-.spec-cut {
-  fill: none;
-  stroke: var(--cut);
-  /* Screen pixels at every zoom, so it stays visible on zoomed-out graphs. */
-  vector-effect: non-scaling-stroke;
-  stroke-width: 2.5;
-  stroke-dasharray: 7 6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-/* Nodes faded per shape, like .dimmed. Edges keep opacity, which also fades
-   their inversion bubble (a marker, which stroke-opacity would not reach). */
-.graph-node.spec-rewritten:not(.spec-current) > * {
-  fill-opacity: 0.22;
-  stroke-opacity: 0.22;
-}
-
-.graph-edge.spec-rewritten {
-  opacity: 0.22;
-}
-
-.graph-node.spec-in-cut ellipse,
-.graph-node.spec-in-cut rect,
-.graph-node.spec-in-cut polygon {
-  stroke: var(--teal);
-  stroke-width: 4;
-}
-
-.graph-node.spec-current ellipse,
-.graph-node.spec-current rect,
-.graph-node.spec-current polygon {
-  fill: var(--highlight);
-  stroke: var(--highlight);
-}
-
-.graph-node.spec-current text {
-  fill: white;
+/* The graph, and on top of it the hover highlight. */
+.graph-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* Rewrite-order list: polynomials already substituted, and the latest one.

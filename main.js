@@ -220,7 +220,6 @@ const state = {
   specStepIndex: 0
 };
 
-const graphElement = document.querySelector("#graph");
 const examplePicker = document.querySelector("#examplePicker");
 const phaseTabsPreprocessing = document.querySelector("#phaseTabsPreprocessing");
 const phaseTabsSpecification = document.querySelector("#phaseTabsSpecification");
@@ -232,7 +231,6 @@ const polynomialList = document.querySelector("#polynomialList");
 const specPolynomial = document.querySelector("#specPolynomial");
 const specTermCount = document.querySelector("#specTermCount");
 const specStepCaption = document.querySelector("#specStepCaption");
-const specGraphElement = document.querySelector("#specGraph");
 const specStepLabel = document.querySelector("#specStepLabel");
 const specStepBack = document.querySelector("#specStepBack");
 const specStepForward = document.querySelector("#specStepForward");
@@ -264,8 +262,8 @@ const zoomOut = document.querySelector("#zoomOut");
 const zoomIn = document.querySelector("#zoomIn");
 const zoomReset = document.querySelector("#zoomReset");
 const zoomLabel = document.querySelector("#zoomLabel");
-const graphCard = document.querySelector(".graph-card");
-const specGraphCard = specGraphElement.closest(".graph-card");
+const graphCard = document.querySelector("#graphCard");
+const specGraphCard = document.querySelector("#specGraphCard");
 
 function currentExample() {
   return examples[state.exampleIndex];
@@ -642,10 +640,16 @@ function buildPhaseTabs() {
 
 let graphViewCache = null;
 
-// The visible nodes/edges for the current example and stage, plus each
-// node's parent/child edges. Hovering reads parents/children on every node
-// change, so this is computed once per state instead of filtering every edge
-// per hover (~96k edges on sp-ar-rc-64).
+const nodeIdsCache = new WeakMap();
+
+function exampleNodeIds(example) {
+  if (!nodeIdsCache.has(example)) {
+    nodeIdsCache.set(example, new Set(example.nodes.map((node) => node.id)));
+  }
+  return nodeIdsCache.get(example);
+}
+
+// The visible nodes/edges for the current example and stage.
 function currentGraphView() {
   const example = currentExample();
   const overlay = currentOverlay();
@@ -654,30 +658,13 @@ function currentGraphView() {
     return cached;
   }
 
-  const nodes = example.nodes;
-  const ids = new Set(nodes.map((node) => node.id));
-  const edges = activeEdges().filter((edge) => ids.has(edge.from) && ids.has(edge.to));
-  const parents = new Map();
-  const children = new Map();
-  edges.forEach((edge) => {
-    if (!children.has(edge.from)) {
-      children.set(edge.from, []);
-    }
-    children.get(edge.from).push(edge);
-    if (!parents.has(edge.to)) {
-      parents.set(edge.to, []);
-    }
-    parents.get(edge.to).push(edge);
-  });
-
+  const ids = exampleNodeIds(example);
   graphViewCache = {
     example,
     overlay,
     ids,
-    nodes,
-    edges,
-    parents,
-    children
+    nodes: example.nodes,
+    edges: activeEdges().filter((edge) => ids.has(edge.from) && ids.has(edge.to))
   };
   return graphViewCache;
 }
@@ -854,7 +841,8 @@ function polynomialNodesInLabelOrder() {
 
 // The stage's live polynomial set in decreasing label order, preceded by any
 // stage-level equations that don't belong to a single node. `key` identifies
-// a row across steps (see updatePolynomialEntries).
+// a row across steps, `textKey` its text (which its height depends on; see
+// renderPolynomialWindow).
 function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials) {
   const entries = [];
   const seen = new Set();
@@ -867,22 +855,22 @@ function buildPolynomialEntries(dimmedNodes, rootUpdates, extraPolynomials) {
     if (!expression) {
       return;
     }
-    const dedupeKey = `${node.label}::${expression}`;
-    if (seen.has(dedupeKey)) {
+    const textKey = `${node.label}::${expression}`;
+    if (seen.has(textKey)) {
       return;
     }
-    seen.add(dedupeKey);
-    entries.push({ key: `node:${node.id}`, label: node.label, expression, nodeId: node.id });
+    seen.add(textKey);
+    entries.push({ key: `node:${node.id}`, textKey, label: node.label, expression, nodeId: node.id });
   });
 
   extraPolynomials.forEach((entry) => {
     const expression = formatPolynomialExpression(entry.expression);
-    const dedupeKey = `${entry.label}::${expression}`;
-    if (seen.has(dedupeKey)) {
+    const textKey = `${entry.label}::${expression}`;
+    if (seen.has(textKey)) {
       return;
     }
-    seen.add(dedupeKey);
-    entries.push({ key: `extra:${dedupeKey}`, label: entry.label, expression, nodeId: null });
+    seen.add(textKey);
+    entries.push({ key: `extra:${textKey}`, textKey, label: entry.label, expression, nodeId: null });
   });
 
   return entries.reverse();
@@ -910,101 +898,452 @@ function polynomialEntryElement(entry) {
   return rowTemplate.content.firstElementChild;
 }
 
-// Rebuilds the whole list. `kind` names which list this is, so the
-// preprocessing list can later be updated in place (updatePolynomialEntries)
-// as long as it is still the one on screen.
-function renderPolynomialEntries(title, entries, kind = null) {
+// ---------------------------------------------------------------------------
+// The polynomial list
+//
+// It has a row per polynomial - ~48k on sp-ar-rc-64 - but only the rows in
+// and around view are in the DOM, and scrolling swaps rows in and out.
+// Creating and laying out every row took seconds on the large circuits, on
+// every tab switch and "Undo all". Rows wrap, so their heights differ: each
+// is measured once it has been drawn and remembered by its text, and a row
+// never drawn yet is assumed to be of average height.
+// ---------------------------------------------------------------------------
+
+// The space below each row (.poly-list.compact .poly-window > .poly-item).
+const POLY_ROW_GAP = 4;
+// How far beyond the visible part of the list rows are drawn, above and
+// below, in list heights.
+const POLY_OVERSCAN = 1;
+// The height assumed for rows before any has been measured.
+const POLY_DEFAULT_ROW_HEIGHT = 38;
+
+const polySpacer = document.createElement("div");
+polySpacer.className = "poly-rows";
+const polyWindow = document.createElement("div");
+polyWindow.className = "poly-window";
+polySpacer.append(polyWindow);
+polynomialList.append(polySpacer);
+
+const polyView = {
+  // The list shown ("preprocessing" / "specification") and its circuit: the
+  // same list is updated in place, another one starts at the top.
+  kind: null,
+  example: null,
+  entries: [],
+  // offsets[i] is where row i starts, offsets[entries.length] the total.
+  offsets: new Float64Array(1),
+  indexByKey: new Map(),
+  indexByNode: new Map(),
+  // Measured row heights, gap included, by entry.textKey, at rowWidth, and
+  // the height assumed for the others: the average measured when the list
+  // was shown (changing it as rows are measured would move every row).
+  heights: new Map(),
+  measuredSum: 0,
+  estimate: POLY_DEFAULT_ROW_HEIGHT,
+  rowWidth: 0,
+  // The width a drawn row turned out to need, should a browser break lines
+  // less often than polynomialRowWidth assumes.
+  overflowWidth: 0,
+  // The rows in the DOM, by entry key, as { element, entry }.
+  rows: new Map(),
+  highlightedNodeId: null,
+  // Specification rewrite tab: rows up to this step are used.
+  specStep: 0
+};
+
+// Shows `entries`. The list already shown (same tab and circuit) is updated
+// in place, keeping the rows on screen where they are; any other list starts
+// at its top. Returns whether it did the latter.
+function showPolynomialEntries(title, entries, kind) {
+  const example = currentExample();
+  const fresh = polyView.kind !== kind || polyView.example !== example;
   polynomialTitle.textContent = title;
   polynomialCount.textContent = `${entries.length} eqs`;
-  // The rows sit in one wrapper that is as wide as the widest row (see
-  // .poly-rows), so they all share that width like grid items would.
-  polynomialList.innerHTML = `<div class="poly-rows">${entries.map(polynomialEntryMarkup).join("")}</div>`;
-
-  polyDom = {
-    kind,
-    example: currentExample(),
-    container: polynomialList.firstElementChild,
-    elements: new Map(),
-    rows: new Map(),
-    highlightedNodeId: null
-  };
-  if (kind) {
-    const elements = polynomialList.querySelectorAll(".poly-item");
-    entries.forEach((entry, index) => {
-      polyDom.rows.set(entry.key, { element: elements[index], expression: entry.expression, nodeId: entry.nodeId });
-    });
+  // The row at the top of the view stays there if it still exists.
+  const anchor = fresh ? null : polynomialAnchor();
+  if (fresh) {
+    polyView.kind = kind;
+    polyView.example = example;
+    polyView.rows.forEach((row) => row.element.remove());
+    polyView.rows.clear();
+    polyView.overflowWidth = 0;
+    if (polyView.heights.size) {
+      polyView.estimate = polyView.measuredSum / polyView.heights.size;
+    }
+    polynomialList.scrollTop = 0;
   }
-  polynomialList.querySelectorAll("[data-poly-node-id]").forEach((element) => {
-    polyDom.elements.set(element.dataset.polyNodeId, element);
+  polyView.entries = entries;
+  polyView.indexByKey = new Map();
+  polyView.indexByNode = new Map();
+  entries.forEach((entry, index) => {
+    polyView.indexByKey.set(entry.key, index);
+    if (entry.nodeId) {
+      polyView.indexByNode.set(entry.nodeId, index);
+    }
   });
+  // Without scrolling to it, unlike a hover (highlightPolynomialRow).
+  polyView.highlightedNodeId = state.activeNodeId;
+  sizePolynomialRows();
+  layoutPolynomialRows();
+  renderPolynomialWindow(anchor);
+  return fresh;
 }
 
-// Brings the rendered preprocessing list to `entries` by touching only the
-// rows that changed: a node-by-node step removes the eliminated gate's row
-// and rewrites its parent's. Rebuilding all ~48k rows of sp-ar-rc-64 instead
-// took seconds per click. Rows keep their relative order (label order), so a
-// row that comes back (stepping backwards) goes right after its predecessor.
-// Returns false when most rows would be new anyway, where one rebuild is
-// cheaper than inserting them one by one.
-function updatePolynomialEntries(title, entries) {
-  const rows = polyDom.rows;
-  const added = entries.reduce((count, entry) => count + (rows.has(entry.key) ? 0 : 1), 0);
-  if (added > Math.max(500, entries.length / 4)) {
+// Rows are all as wide as the widest needs to be (or the panel, if wider).
+// With every row in the DOM that was the rows' min-content width; with only
+// some there it is worked out here. A row needs its label plus the longest
+// stretch of its polynomial without a line break opportunity, and those only
+// come after a "-" (or at a space): some polynomials have none for hundreds
+// of characters. Measuring the text of all ~48k rows would take a while, so
+// only the rows with the most characters in such a stretch are measured.
+const POLY_WIDTH_CANDIDATES = 32;
+const rowTextInfo = new Map(); // entry.textKey -> { piece, chars, width }
+let rowMetrics = null;
+
+function longestUnbreakablePiece(text) {
+  let longest = "";
+  let start = 0;
+  const take = (end) => {
+    if (end - start > longest.length) {
+      longest = text.slice(start, end);
+    }
+  };
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === " ") {
+      take(index);
+      start = index + 1;
+    } else if (char === "-") {
+      take(index + 1);
+      start = index + 1;
+    }
+  }
+  take(text.length);
+  return longest;
+}
+
+function polynomialRowInfo(entry) {
+  let info = rowTextInfo.get(entry.textKey);
+  if (!info) {
+    const piece = longestUnbreakablePiece(entry.expression);
+    info = { piece, chars: entry.label.length + piece.length, width: 0 };
+    rowTextInfo.set(entry.textKey, info);
+  }
+  return info;
+}
+
+// The fonts of a row's label and text, and its padding, borders and gap.
+function polynomialRowMetrics() {
+  if (!rowMetrics) {
+    const probe = polynomialEntryElement({ label: "x", expression: "x", nodeId: null });
+    polyWindow.append(probe);
+    const label = probe.querySelector("h4");
+    const text = probe.querySelector("p");
+    const font = (element) => {
+      const style = getComputedStyle(element);
+      return `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    };
+    rowMetrics = {
+      context: document.createElement("canvas").getContext("2d"),
+      labelFont: font(label),
+      textFont: font(text),
+      chrome: probe.getBoundingClientRect().width - label.getBoundingClientRect().width - text.getBoundingClientRect().width
+    };
+    probe.remove();
+  }
+  return rowMetrics;
+}
+
+function polynomialRowWidth(entries) {
+  // The candidates, fewest characters first.
+  const candidates = [];
+  entries.forEach((entry) => {
+    const info = polynomialRowInfo(entry);
+    if (candidates.length === POLY_WIDTH_CANDIDATES) {
+      if (info.chars <= candidates[0].info.chars) {
+        return;
+      }
+      candidates.shift();
+    }
+    let position = candidates.length;
+    while (position > 0 && candidates[position - 1].info.chars > info.chars) {
+      position -= 1;
+    }
+    candidates.splice(position, 0, { info, label: entry.label });
+  });
+  const metrics = polynomialRowMetrics();
+  const { context } = metrics;
+  let widest = 0;
+  candidates.forEach(({ info, label }) => {
+    if (!info.width) {
+      context.font = metrics.labelFont;
+      const labelWidth = context.measureText(label).width;
+      context.font = metrics.textFont;
+      info.width = metrics.chrome + labelWidth + context.measureText(info.piece).width;
+    }
+    widest = Math.max(widest, info.width);
+  });
+  return Math.ceil(widest);
+}
+
+// Sets the rows' width. Row heights measured at another width no longer
+// hold (rows wrap differently), so they are forgotten.
+function sizePolynomialRows() {
+  polySpacer.style.width = `${Math.max(polynomialRowWidth(polyView.entries), polyView.overflowWidth)}px`;
+  const width = polySpacer.getBoundingClientRect().width;
+  if (width !== polyView.rowWidth) {
+    polyView.rowWidth = width;
+    polyView.heights.clear();
+    polyView.measuredSum = 0;
+  }
+}
+
+function layoutPolynomialRows() {
+  const { entries, heights, estimate } = polyView;
+  const offsets = new Float64Array(entries.length + 1);
+  let top = 0;
+  for (let index = 0; index < entries.length; index += 1) {
+    offsets[index] = top;
+    top += heights.get(entries[index].textKey) ?? estimate;
+  }
+  offsets[entries.length] = top;
+  polyView.offsets = offsets;
+  polySpacer.style.height = `${top}px`;
+}
+
+function rememberRowHeight(textKey, height) {
+  const previous = polyView.heights.get(textKey);
+  if (previous === height) {
     return false;
   }
+  polyView.measuredSum += height - (previous ?? 0);
+  polyView.heights.set(textKey, height);
+  return true;
+}
 
-  polynomialTitle.textContent = title;
-  polynomialCount.textContent = `${entries.length} eqs`;
-  const keys = new Set(entries.map((entry) => entry.key));
+// The row at `y` pixels from the top of the list (the first or last row for
+// a `y` beyond them).
+function polynomialRowAt(y) {
+  const offsets = polyView.offsets;
+  let low = 0;
+  let high = polyView.entries.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (offsets[middle] <= y) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return low;
+}
+
+// How far a row element is below the top of the list's visible area.
+function rowViewportTop(element) {
+  return element.getBoundingClientRect().top - polynomialList.getBoundingClientRect().top - polynomialList.clientTop;
+}
+
+// A row in view and how far the view starts above or below it. Rows are
+// placed by an estimated height until they have been drawn, so drawing some
+// moves the ones after them; keeping this row where it is on screen
+// (renderPolynomialWindow) stops the list from jumping about. It is the
+// first row in view whose height is known, as the rows above it may still
+// change, or else the top one.
+function polynomialAnchor() {
+  const { entries, offsets, heights } = polyView;
+  if (!entries.length) {
+    return null;
+  }
+  const viewTop = polynomialList.scrollTop;
+  const viewBottom = viewTop + polynomialList.clientHeight;
+  let index = polynomialRowAt(viewTop);
+  for (let row = index; row < entries.length && offsets[row] < viewBottom; row += 1) {
+    if (heights.has(entries[row].textKey)) {
+      index = row;
+      break;
+    }
+  }
+  return { key: entries[index].key, shift: viewTop - offsets[index] };
+}
+
+function placePolynomialAnchor(anchor) {
+  const index = anchor ? polyView.indexByKey.get(anchor.key) : undefined;
+  if (index !== undefined) {
+    const top = polyView.offsets[index] + anchor.shift;
+    if (Math.abs(polynomialList.scrollTop - top) > 0.5) {
+      polynomialList.scrollTop = top;
+    }
+  }
+}
+
+// Brings the rows in the DOM in line with the entries and the scroll
+// position (the rows in view, and a list height either side), keeping
+// `anchor` (see polynomialAnchor) where it is on screen.
+function renderPolynomialWindow(anchor = polynomialAnchor()) {
+  // Each pass places the rows by the heights known so far and measures the
+  // new ones; it takes one or two for the rows in view to stop moving.
+  for (let pass = 0; pass < 4; pass += 1) {
+    placePolynomialAnchor(anchor);
+    if (!drawPolynomialRows()) {
+      return;
+    }
+  }
+  placePolynomialAnchor(anchor);
+  drawPolynomialRows();
+}
+
+// Draws the rows in view and a list height either side; returns whether any
+// turned out to have another height than they were placed by.
+function drawPolynomialRows() {
+  const { entries, rows } = polyView;
+  const viewTop = polynomialList.scrollTop;
+  const viewHeight = polynomialList.clientHeight;
+  const first = polynomialRowAt(viewTop - POLY_OVERSCAN * viewHeight);
+  const last = entries.length ? polynomialRowAt(viewTop + (1 + POLY_OVERSCAN) * viewHeight) + 1 : 0;
+
+  const wanted = new Set();
+  for (let index = first; index < last; index += 1) {
+    wanted.add(entries[index].key);
+  }
   rows.forEach((row, key) => {
-    if (!keys.has(key)) {
+    if (!wanted.has(key)) {
       row.element.remove();
       rows.delete(key);
-      if (row.nodeId) {
-        polyDom.elements.delete(row.nodeId);
-      }
     }
   });
+  // Rows that stay are left in place (moving one would drop its focus); the
+  // others are inserted around them, in entry order.
+  const created = [];
+  let next = polyWindow.firstElementChild;
+  for (let index = first; index < last; index += 1) {
+    const entry = entries[index];
+    const row = rows.get(entry.key);
+    if (row) {
+      if (row.element !== next) {
+        polyWindow.insertBefore(row.element, next);
+      }
+      if (row.entry.expression !== entry.expression) {
+        row.element.querySelector("p").textContent = entry.expression;
+      }
+      row.entry = entry;
+      decoratePolynomialRow(row.element, entry);
+      next = row.element.nextElementSibling;
+    } else {
+      const element = polynomialEntryElement(entry);
+      decoratePolynomialRow(element, entry);
+      rows.set(entry.key, { element, entry });
+      polyWindow.insertBefore(element, next);
+      created.push(element);
+    }
+  }
+  polyWindow.style.transform = `translateY(${polyView.offsets[first]}px)`;
 
-  let previous = null;
-  entries.forEach((entry) => {
-    let row = rows.get(entry.key);
-    if (!row) {
-      row = { element: polynomialEntryElement(entry), expression: entry.expression, nodeId: entry.nodeId };
-      if (previous) {
-        previous.after(row.element);
-      } else {
-        polyDom.container.prepend(row.element);
-      }
-      rows.set(entry.key, row);
-      if (entry.nodeId) {
-        polyDom.elements.set(entry.nodeId, row.element);
-        row.element.classList.toggle("active-link", entry.nodeId === polyDom.highlightedNodeId);
-      }
-    } else if (row.expression !== entry.expression) {
-      row.element.querySelector("p").textContent = entry.expression;
-      row.expression = entry.expression;
-    }
-    previous = row.element;
+  // A new row whose text sticks out: widen them all.
+  const overflow = created.reduce((most, element) => Math.max(most, element.scrollWidth - element.clientWidth), 0);
+  if (overflow > 1) {
+    polyView.overflowWidth = polyView.rowWidth + overflow;
+    sizePolynomialRows();
+    layoutPolynomialRows();
+    return true;
+  }
+
+  let measuredNew = false;
+  for (let index = first; index < last; index += 1) {
+    const entry = entries[index];
+    const height = rows.get(entry.key).element.getBoundingClientRect().height + POLY_ROW_GAP;
+    measuredNew = rememberRowHeight(entry.textKey, height) || measuredNew;
+  }
+  if (measuredNew) {
+    layoutPolynomialRows();
+    polyWindow.style.transform = `translateY(${polyView.offsets[first]}px)`;
+  }
+  return measuredNew;
+}
+
+polynomialList.addEventListener("scroll", () => renderPolynomialWindow(), { passive: true });
+
+// Re-sizes the rows (see sizePolynomialRows) without moving the list.
+function resizePolynomialRows() {
+  const anchor = polynomialAnchor();
+  sizePolynomialRows();
+  layoutPolynomialRows();
+  renderPolynomialWindow(anchor);
+}
+
+// The panel's width can change the rows' (see polynomialRowWidth).
+new ResizeObserver(resizePolynomialRows).observe(polynomialList);
+
+// Text measured before the web fonts were in is off.
+document.fonts?.addEventListener("loadingdone", () => {
+  rowMetrics = null;
+  rowTextInfo.forEach((info) => {
+    info.width = 0;
   });
-  return true;
+  resizePolynomialRows();
+});
+
+// The classes of a row that depend on the state rather than its entry.
+function decoratePolynomialRow(element, entry) {
+  element.classList.toggle("active-link", entry.nodeId !== null && entry.nodeId === polyView.highlightedNodeId);
+  if (entry.step) {
+    element.classList.toggle("spec-used", entry.step <= polyView.specStep);
+    element.classList.toggle("spec-current", entry.step === polyView.specStep);
+  }
+}
+
+function polynomialRowElement(nodeId) {
+  const index = polyView.indexByNode.get(nodeId);
+  return index === undefined ? null : polyView.rows.get(polyView.entries[index].key)?.element ?? null;
+}
+
+// Scrolls the list - just the list, not the page - so that row `index` is in
+// view, and returns its element.
+function revealPolynomialRow(index) {
+  const list = polynomialList;
+  const top = polyView.offsets[index];
+  const bottom = polyView.offsets[index + 1] - POLY_ROW_GAP;
+  let scrollTop = list.scrollTop;
+  if (top < scrollTop) {
+    scrollTop = top;
+  } else if (bottom > scrollTop + list.clientHeight) {
+    scrollTop = bottom - list.clientHeight;
+  }
+  renderPolynomialWindow({ key: polyView.entries[index].key, shift: scrollTop - top });
+  const element = polyView.rows.get(polyView.entries[index].key)?.element;
+  if (!element) {
+    return null;
+  }
+  // Rows not measured before were placed by the average height; now that
+  // this one is drawn, make sure it really is in view.
+  const elementTop = rowViewportTop(element);
+  const elementBottom = elementTop + element.getBoundingClientRect().height;
+  if (elementTop < 0) {
+    list.scrollTop += elementTop;
+  } else if (elementBottom > list.clientHeight) {
+    list.scrollTop += elementBottom - list.clientHeight;
+  }
+  return element;
+}
+
+// Moves the hover highlight in the list to `nodeId`'s row (null: none) and
+// scrolls that row into view.
+function highlightPolynomialRow(nodeId) {
+  if (polyView.highlightedNodeId === nodeId) {
+    return;
+  }
+  polynomialRowElement(polyView.highlightedNodeId)?.classList.remove("active-link");
+  polyView.highlightedNodeId = nodeId;
+  const index = nodeId === null ? undefined : polyView.indexByNode.get(nodeId);
+  if (index !== undefined) {
+    revealPolynomialRow(index)?.classList.add("active-link");
+  }
 }
 
 function renderPolynomialList() {
   const stage = currentStage();
   const entries = buildPolynomialEntries(currentStageDimmedSet(), currentStageRootUpdatesMap(), stage.polynomials ?? []);
-  const title = `${stage.name} active set`;
-  const inPlace = polyDom.kind === "preprocessing" && polyDom.example === currentExample();
-  if (!inPlace || !updatePolynomialEntries(title, entries)) {
-    renderPolynomialEntries(title, entries, "preprocessing");
-  }
+  showPolynomialEntries(`${stage.name} active set`, entries, "preprocessing");
 }
-
-// The rendered polynomial list: row elements by node id, and which one
-// currently carries the hover highlight, so a hover touches two rows instead
-// of every row. For the preprocessing list also every row by entry key, for
-// updatePolynomialEntries.
-let polyDom = { kind: null, example: null, container: null, elements: new Map(), rows: new Map(), highlightedNodeId: null };
 
 function setActiveNode(nodeId) {
   if (state.activeNodeId === nodeId) {
@@ -1079,16 +1418,20 @@ function nodeMap() {
   return nodeMapCache.get(example);
 }
 
+// Scanning the edges (~96k on sp-ar-rc-64) takes a millisecond or two; an
+// index of every node's edges took ten to build after each step.
 function nodeParentsFor(nodeId) {
   const map = nodeMap();
-  return (currentGraphView().parents.get(nodeId) ?? []).map((edge) => map.get(edge.from)?.label || edge.from);
+  return currentGraphView()
+    .edges.filter((edge) => edge.to === nodeId)
+    .map((edge) => map.get(edge.from)?.label || edge.from);
 }
 
 function nodeChildrenFor(nodeId) {
   const map = nodeMap();
-  return (currentGraphView().children.get(nodeId) ?? []).map(
-    (edge) => `${edge.inverted ? "!" : ""}${map.get(edge.to)?.label || edge.to}`
-  );
+  return currentGraphView()
+    .edges.filter((edge) => edge.from === nodeId)
+    .map((edge) => `${edge.inverted ? "!" : ""}${map.get(edge.to)?.label || edge.to}`);
 }
 
 function renderInspector() {
@@ -1130,112 +1473,6 @@ function renderHeader() {
   stageSummary.textContent = stage.summary;
   exampleTitle.textContent = example.title;
   exampleDescription.textContent = example.description;
-}
-
-function edgeClassNames(edge) {
-  const classes = ["graph-edge"];
-  if (edge.inverted) {
-    classes.push("inverted");
-  }
-  if (state.activeNodeId && (edge.from === state.activeNodeId || edge.to === state.activeNodeId)) {
-    classes.push("active");
-  }
-  return classes.join(" ");
-}
-
-function nodeMarkup(node, dimmedNodes, rootUpdates, showLabels) {
-  const isActive = node.id === state.activeNodeId;
-  const isDimmed = dimmedNodes.has(node.id);
-  const isRootUpdated = rootUpdates.has(node.id);
-  const classes = [
-    "graph-node",
-    node.type,
-    isActive ? "active" : "",
-    isDimmed ? "dimmed" : "",
-    isRootUpdated ? "root-updated" : ""
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const width = node.width ?? (node.type === "output" ? 60 : 48);
-  const height = node.height ?? 36;
-  const ariaLabel = escapeHtml(node.label);
-  const labelMarkup = (y) => (showLabels ? `<text y="${y}">${ariaLabel}</text>` : "");
-  const shape = node.shape ?? (node.type === "output" ? "rect" : "circle");
-
-  if (shape === "triangle") {
-    const halfWidth = width / 2;
-    const halfHeight = height / 2;
-    return `
-      <g class="${classes}" data-node-id="${node.id}" tabindex="0" role="button" aria-label="${ariaLabel}" transform="translate(${node.x}, ${node.y})">
-        <polygon points="0,${-halfHeight} ${halfWidth},${halfHeight} ${-halfWidth},${halfHeight}"></polygon>
-        ${labelMarkup(6)}
-      </g>
-    `;
-  }
-
-  if (shape === "box" || node.type === "output") {
-    return `
-      <g class="${classes}" data-node-id="${node.id}" tabindex="0" role="button" aria-label="${ariaLabel}" transform="translate(${node.x}, ${node.y})">
-        <rect x="${-width / 2}" y="${-height / 2}" width="${width}" height="${height}"></rect>
-        ${labelMarkup(1)}
-      </g>
-    `;
-  }
-
-  return `
-    <g class="${classes}" data-node-id="${node.id}" tabindex="0" role="button" aria-label="${ariaLabel}" transform="translate(${node.x}, ${node.y})">
-      <ellipse rx="${width / 2}" ry="${height / 2}"></ellipse>
-      ${labelMarkup(1)}
-    </g>
-  `;
-}
-
-// Delegated from the <svg> rather than bound per node: the graph is rebuilt
-// on every render, and re-binding four listeners on each of 48k nodes was a
-// large share of a render on sp-ar-rc-64.
-function graphNodeOf(target) {
-  return target instanceof Element ? target.closest("[data-node-id]") : null;
-}
-
-graphElement.addEventListener("mouseover", (event) => {
-  const element = graphNodeOf(event.target);
-  if (element && !isPanning()) {
-    setActiveNode(element.dataset.nodeId);
-  }
-});
-graphElement.addEventListener("focusin", (event) => {
-  const element = graphNodeOf(event.target);
-  if (element) {
-    setActiveNode(element.dataset.nodeId);
-  }
-});
-graphElement.addEventListener("click", (event) => {
-  const element = graphNodeOf(event.target);
-  if (element) {
-    setActiveNode(element.dataset.nodeId);
-  }
-});
-graphElement.addEventListener("keydown", (event) => {
-  const element = graphNodeOf(event.target);
-  if (element && (event.key === "Enter" || event.key === " ")) {
-    event.preventDefault();
-    setActiveNode(element.dataset.nodeId);
-  }
-});
-
-graphElement.addEventListener("mouseleave", () => {
-  setActiveNode(null);
-});
-
-function edgePath(edge, map) {
-  if (edge.points?.length) {
-    return edge.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point[0]} ${point[1]}`).join(" ");
-  }
-
-  const fromNode = map.get(edge.from);
-  const toNode = map.get(edge.to);
-  const controlX = (fromNode.x + toNode.x) / 2;
-  return `M ${fromNode.x + 22} ${fromNode.y} C ${controlX} ${fromNode.y}, ${controlX - 20} ${toNode.y}, ${toNode.x - 28} ${toNode.y}`;
 }
 
 function visibleGraphBounds(nodes, edges) {
@@ -1285,26 +1522,24 @@ function currentGraphSize() {
   return { width: box.width, height: box.height };
 }
 
-function sizeGraphElement(element, box) {
-  element.setAttribute("viewBox", `${box.minX} ${box.minY} ${box.width} ${box.height}`);
-  element.style.width = `${box.width * state.zoom}px`;
-  element.style.height = `${box.height * state.zoom}px`;
-}
-
 // Above this many visible nodes, node labels are only drawn from
-// LABEL_MIN_ZOOM up: below it they are a few pixels tall and unreadable, and
-// leaving them out spares the browser tens of thousands of <text> elements
-// on the large circuits. Zooming re-renders the graph, so they come back as
-// soon as they are legible.
+// LABEL_MIN_ZOOM up: below it they are a few pixels tall and unreadable.
 const LABEL_NODE_LIMIT = 5000;
 const LABEL_MIN_ZOOM = 0.5;
+
+function labelsShown(nodeCount) {
+  return nodeCount <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
+}
+
+// The space around a graph inside its card.
+const GRAPH_MARGIN = 12;
 
 function fitZoom() {
   const graphSize = currentGraphSize();
   // Both tabs draw the same layout; measure whichever card is on screen.
   const card = state.phase === "specification" ? specGraphCard : graphCard;
-  const availableWidth = Math.max(260, card.clientWidth - 24);
-  const availableHeight = Math.max(220, card.clientHeight - 24);
+  const availableWidth = Math.max(260, card.clientWidth - 2 * GRAPH_MARGIN);
+  const availableHeight = Math.max(220, card.clientHeight - 2 * GRAPH_MARGIN);
   return Math.min(availableWidth / graphSize.width, availableHeight / graphSize.height, 1) * 0.98;
 }
 
@@ -1323,211 +1558,1199 @@ function ensureZoomInitialized() {
   state.zoom = Math.max(MIN_ZOOM, fitZoom());
 }
 
-// The rendered preprocessing graph: which state it shows (`view`, and the
-// overlay's dimmed / root-updated sets) and its elements - nodes by id, edge
-// paths by edge object - so a step or a hover only restyles what changed
-// (see renderGraph and updateGraphHighlight).
-let graphDom = {
-  example: null,
-  view: null,
-  showLabels: null,
-  dimmedSet: new Set(),
-  rootUpdatesMap: new Map(),
-  nodeElements: new Map(),
-  edgeElements: new Map(),
-  edgeLayer: null,
-  highlightedNodeId: null
-};
+// ---------------------------------------------------------------------------
+// Drawing the graphs
+//
+// Both graphs (preprocessing and specification rewrite) are drawn on canvases
+// rather than built from SVG elements: sp-ar-rc-64 has ~48k nodes and ~96k
+// edges, and as SVG those took seconds to create and lay out, and up to a
+// second to repaint on every hover, step, zoom and scroll. A canvas only
+// covers the part of its card in view - it sticks to the card, while a
+// spacer as big as the zoomed graph gives the card its scroll range - so a
+// frame draws only what is on screen. The hover highlight is drawn on a
+// second canvas on top, so moving the mouse never redraws the graph itself.
+// ---------------------------------------------------------------------------
 
-// Node labels are left out of large graphs below LABEL_MIN_ZOOM (see there).
-function labelsShown(nodeCount) {
-  return nodeCount <= LABEL_NODE_LIMIT || state.zoom >= LABEL_MIN_ZOOM;
-}
+// What the graph shows about a node, one bit each (GraphCanvas.setNodeFlags).
+const NODE_DIMMED = 1; // eliminated by preprocessing
+const NODE_ROOT_UPDATED = 2; // given a new polynomial by preprocessing
+const NODE_SPEC_REWRITTEN = 4; // already substituted into the specification
+const NODE_SPEC_IN_CUT = 8; // a variable of the current specification polynomial
+const NODE_SPEC_CURRENT = 16; // the gate substituted last
+const NODE_FLAG_BITS = 5;
 
-const SVG_NS = "http://www.w3.org/2000/svg";
+// Node types by their number in a scene (other types are drawn as gates).
+const NODE_TYPES = ["and", "input", "output", "constant"];
 
-// Marker ids are document-global, so each graph gets its own.
-function inversionMarkerDefs(id) {
-  return `
-    <defs>
-      <marker id="${id}" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto" markerUnits="userSpaceOnUse">
-        <circle cx="6" cy="6" r="4.2" fill="var(--surface-strong)" stroke="var(--ink)" stroke-width="1.4"></circle>
-      </marker>
-    </defs>
-  `;
-}
+const SHAPE_ELLIPSE = 0;
+const SHAPE_RECT = 1;
+const SHAPE_TRIANGLE = 2;
 
-function edgeLayerMarkup(edges, map, markerId) {
-  return edges
-    .map((edge, index) => {
-      const marker = edge.inverted ? ` marker-end="url(#${markerId})"` : "";
-      return `<path class="${edgeClassNames(edge)}" data-edge-index="${index}" d="${edgePath(edge, map)}"${marker}></path>`;
-    })
-    .join("");
-}
+// The look of the graphs, in graph units (which the zoom scales) unless
+// noted. Colours are CSS custom properties (graphPalette).
+const EDGE_WIDTH = 2.1;
+const EDGE_OPACITY = 0.84;
+const EDGE_REWRITTEN_OPACITY = 0.22; // out of an already substituted gate
+const EDGE_ACTIVE_WIDTH = 3.3;
+const EDGE_DASH = [5, 6]; // inverted edges
+const DASH_PERIOD = EDGE_DASH[0] + EDGE_DASH[1];
+const BUBBLE_RADIUS = 4.2; // the inversion bubble at an inverted edge's child end
+const BUBBLE_STROKE_WIDTH = 1.4;
+const NODE_STROKE_WIDTH = 2;
+const NODE_MARKED_STROKE_WIDTH = 4; // root-updated, in the cut, or hovered
+const NODE_DIMMED_OPACITY = 0.2;
+const NODE_REWRITTEN_OPACITY = 0.22;
+const NODE_GLOW_BLUR = 10; // around the hovered node
+const LABEL_FONT = '13px "IBM Plex Mono", monospace';
+const LABEL_FONT_SIZE = 13;
+const CUT_WIDTH = 2.5; // screen pixels, at every zoom
+const CUT_DASH = [7, 6]; // screen pixels, at every zoom
 
-// Draws the preprocessing graph for the current state. The SVG is only built
-// from scratch for a new circuit or when labels come or go with the zoom;
-// otherwise a step updates it in place (updateGraphInPlace) and a zoom just
-// resizes it - rebuilding sp-ar-rc-64's ~190k SVG elements took seconds.
-function renderGraph() {
-  const example = currentExample();
-  const view = currentGraphView();
-  sizeGraphElement(graphElement, graphViewBox(view.nodes, view.edges));
-  const showLabels = labelsShown(view.nodes.length);
-  if (graphDom.example !== example || graphDom.showLabels !== showLabels) {
-    buildGraph(view, showLabels);
-  } else {
-    updateGraphInPlace(view);
-  }
-  updatePannable(graphCard);
-}
+// Level of detail for zoomed-out views of the large circuits, in device
+// pixels. Nodes less than TINY_NODE_PX tall are drawn as squares of the same
+// area, in the average colour of their fill and outline - or in their
+// outline colour if that marks them (root-updated, in the cut, just
+// substituted), so the marking still shows. Inversion bubbles with a radius
+// under TINY_BUBBLE_PX become squares too. A dash pattern shorter than
+// MIN_DASH_PX becomes a solid line (dashes that small look solid anyway).
+// Labels smaller than MIN_LABEL_PX are left out.
+const TINY_NODE_PX = 4;
+const TINY_NODE_SCALE = [Math.sqrt(Math.PI / 4), 1, Math.SQRT1_2]; // by shape
+const TINY_BUBBLE_PX = 1.5;
+const MIN_DASH_PX = 3;
+const MIN_LABEL_PX = 2;
+// Edges are never drawn thinner than this (CSS pixels): fully zoomed out,
+// sp-ar-rc-64's edges are a twentieth of a pixel wide and all but vanish.
+const MIN_EDGE_PX = 0.1;
+// Edges are cut off this far outside the view: CSS pixels plus graph units
+// (the latter for line caps and inversion bubbles, which scale).
+const EDGE_CLIP_MARGIN_PX = 16;
+const EDGE_CLIP_MARGIN = 8;
+// Edges per path when strokes are wider than a device pixel (strokeEdges),
+// and nodes per path (paintNodes).
+const EDGE_BATCH = 8;
+const NODE_BATCH = 16;
+// Zoomed out, the hovered node and its edges are drawn at least this big
+// (CSS pixels), and a node counts as hovered when the pointer is within
+// HOVER_SLOP_PX of it - for nodes smaller than SMALL_NODE_PX on screen.
+const MIN_ACTIVE_EDGE_PX = 1.5;
+const MIN_ACTIVE_NODE_PX = 4;
+const HOVER_SLOP_PX = 3;
+const SMALL_NODE_PX = 12;
 
-function buildGraph(view, showLabels) {
-  const overlay = currentOverlay();
-  const map = nodeMap();
-  const nodeLayer = view.nodes.map((node) => nodeMarkup(node, overlay.dimmedSet, overlay.rootUpdatesMap, showLabels)).join("");
-
-  graphElement.innerHTML = `
-    ${inversionMarkerDefs("inversionBubble")}
-    <g class="edge-layer">${edgeLayerMarkup(view.edges, map, "inversionBubble")}</g>
-    <g class="node-layer">${nodeLayer}</g>
-  `;
-
-  const nodeElements = new Map();
-  graphElement.querySelectorAll("[data-node-id]").forEach((element) => {
-    nodeElements.set(element.dataset.nodeId, element);
-  });
-  // querySelectorAll returns document order, which is the edges' index order.
-  const edgeElements = new Map();
-  graphElement.querySelectorAll("[data-edge-index]").forEach((element, index) => {
-    edgeElements.set(view.edges[index], element);
-  });
-  graphDom = {
-    example: currentExample(),
-    view,
-    showLabels,
-    dimmedSet: overlay.dimmedSet,
-    rootUpdatesMap: overlay.rootUpdatesMap,
-    nodeElements,
-    edgeElements,
-    edgeLayer: graphElement.querySelector(".edge-layer"),
-    highlightedNodeId: state.activeNodeId
+function graphPalette() {
+  const style = getComputedStyle(document.documentElement);
+  const color = (name) => style.getPropertyValue(name).trim();
+  return {
+    edge: color("--edge"),
+    ink: color("--ink"),
+    bubble: color("--surface-strong"),
+    teal: color("--teal"),
+    highlight: color("--highlight"),
+    cut: color("--cut"),
+    glow: color("--node-glow"),
+    stroke: color("--node-stroke"),
+    andStroke: color("--node-and-stroke"),
+    fills: NODE_TYPES.map((type) => color(`--node-${type}`))
   };
 }
 
-function edgeElement(edge, map, markerId) {
-  const element = document.createElementNS(SVG_NS, "path");
-  element.setAttribute("class", edgeClassNames(edge));
-  element.setAttribute("d", edgePath(edge, map));
-  if (edge.inverted) {
-    element.setAttribute("marker-end", `url(#${markerId})`);
+// A CSS colour as [r, g, b, a] (0-255, alpha 0-1), as a canvas reads it.
+const colorReader = document.createElement("canvas").getContext("2d");
+
+function parseColor(color) {
+  colorReader.fillStyle = "#000";
+  colorReader.fillStyle = color;
+  const value = colorReader.fillStyle;
+  if (value.startsWith("#")) {
+    return [1, 3, 5].map((start) => parseInt(value.slice(start, start + 2), 16)).concat(1);
   }
-  return element;
+  const [red, green, blue, alpha = 1] = value.match(/[\d.]+/g).map(Number);
+  return [red, green, blue, alpha];
 }
 
-// Adds or removes the classes of the nodes that entered or left a set.
-function toggleChangedNodes(previous, next, className) {
-  if (previous === next) {
-    return;
-  }
-  for (const id of previous.keys()) {
-    if (!next.has(id)) {
-      graphDom.nodeElements.get(id)?.classList.remove(className);
-    }
-  }
-  for (const id of next.keys()) {
-    if (!previous.has(id)) {
-      graphDom.nodeElements.get(id)?.classList.add(className);
-    }
-  }
+// `top` painted over `bottom`.
+function colorOver(top, bottom) {
+  const alpha = top[3] + bottom[3] * (1 - top[3]);
+  const channel = (index) => (alpha ? (top[index] * top[3] + bottom[index] * bottom[3] * (1 - top[3])) / alpha : 0);
+  return [channel(0), channel(1), channel(2), alpha];
 }
 
-// Moves the drawn graph from the state it shows to `view`: only the nodes
-// whose dimmed / root-updated status changed are restyled, and only the edges
-// that appeared or disappeared are added or removed (edges are the same
-// objects in every state, see rewiredEdge). Even "Undo all" from the end is
-// cheaper this way than a rebuild (measured on sp-ar-rc-64).
-function updateGraphInPlace(view) {
-  if (graphDom.view === view) {
-    return;
-  }
-  const overlay = currentOverlay();
-  const edgeElements = graphDom.edgeElements;
-  const added = view.edges.filter((edge) => !edgeElements.has(edge));
-  const next = new Set(view.edges);
-  edgeElements.forEach((element, edge) => {
-    if (!next.has(edge)) {
-      element.remove();
-      edgeElements.delete(edge);
-    }
+// What an area made of `parts` ([colour, area] pairs) looks like from far
+// enough away for them to merge, as a CSS colour.
+function averageColor(parts) {
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+  let alpha = 0;
+  let total = 0;
+  parts.forEach(([[r, g, b, a], area]) => {
+    red += r * a * area;
+    green += g * a * area;
+    blue += b * a * area;
+    alpha += a * area;
+    total += area;
   });
-  if (added.length) {
-    const map = nodeMap();
-    const fragment = document.createDocumentFragment();
-    added.forEach((edge) => {
-      const element = edgeElement(edge, map, "inversionBubble");
-      edgeElements.set(edge, element);
-      fragment.append(element);
-    });
-    graphDom.edgeLayer.append(fragment);
+  if (!alpha) {
+    return "rgba(0, 0, 0, 0)";
   }
-
-  toggleChangedNodes(graphDom.dimmedSet, overlay.dimmedSet, "dimmed");
-  toggleChangedNodes(graphDom.rootUpdatesMap, overlay.rootUpdatesMap, "root-updated");
-  graphDom.dimmedSet = overlay.dimmedSet;
-  graphDom.rootUpdatesMap = overlay.rootUpdatesMap;
-  graphDom.view = view;
-
-  // New edges were drawn with the highlight of state.activeNodeId; bring the
-  // rest in line if the highlight moved since the graph was last updated.
-  syncGraphHighlight();
+  return `rgba(${Math.round(red / alpha)}, ${Math.round(green / alpha)}, ${Math.round(blue / alpha)}, ${(alpha / total).toFixed(3)})`;
 }
 
-// Moves the hover highlight on the preprocessing graph from the node that
-// has it to state.activeNodeId: those two nodes and their edges only (it
-// used to restyle every node and look each edge up with its own
-// querySelector - quadratic in the edge count).
-function syncGraphHighlight() {
-  if (graphDom.highlightedNodeId === state.activeNodeId) {
+// A node of the given size with its outline, merged into one colour.
+function mergedNodeColor(fill, stroke, strokeWidth, halfWidth, halfHeight) {
+  const fillColor = parseColor(fill);
+  const strokeColor = parseColor(stroke);
+  const area = Math.PI * halfWidth * halfHeight;
+  // Half the outline lies over the fill, half outside it.
+  const halfRing = (Math.PI * (halfWidth + halfHeight) * strokeWidth) / 2;
+  return averageColor([
+    [fillColor, area - halfRing],
+    [colorOver(strokeColor, fillColor), halfRing],
+    [strokeColor, halfRing]
+  ]);
+}
+
+// An inversion bubble merged into one colour: its outline ring and its fill.
+function mergedBubbleColor(palette) {
+  const inner = BUBBLE_RADIUS - BUBBLE_STROKE_WIDTH / 2;
+  const outer = BUBBLE_RADIUS + BUBBLE_STROKE_WIDTH / 2;
+  return averageColor([
+    [parseColor(palette.ink), Math.PI * (outer ** 2 - inner ** 2)],
+    [parseColor(palette.bubble), Math.PI * inner ** 2]
+  ]);
+}
+
+// How a node is drawn, by its type number and flags; `halfWidth` and
+// `halfHeight` are a typical node's, for the colour of tiny ones.
+function nodeStyle(type, flags, palette, halfWidth, halfHeight) {
+  const current = (flags & NODE_SPEC_CURRENT) !== 0;
+  const marked = (flags & (NODE_ROOT_UPDATED | NODE_SPEC_IN_CUT)) !== 0;
+  let stroke = type === 0 ? palette.andStroke : palette.stroke;
+  if (marked) {
+    stroke = palette.teal;
+  }
+  if (current) {
+    stroke = palette.highlight;
+  }
+  let opacity = 1;
+  if (flags & NODE_DIMMED) {
+    opacity = NODE_DIMMED_OPACITY;
+  } else if ((flags & NODE_SPEC_REWRITTEN) && !current) {
+    opacity = NODE_REWRITTEN_OPACITY;
+  }
+  const fill = current ? palette.highlight : palette.fills[type];
+  const strokeWidth = marked ? NODE_MARKED_STROKE_WIDTH : NODE_STROKE_WIDTH;
+  return {
+    fill,
+    stroke,
+    strokeWidth,
+    opacity,
+    text: type === 0 && !current ? palette.ink : "white",
+    // The colour of the square a tiny node becomes.
+    dot: marked || current ? stroke : mergedNodeColor(fill, stroke, strokeWidth, halfWidth, halfHeight)
+  };
+}
+
+// A graph's nodes as flat arrays, for drawing and hit-testing tens of
+// thousands of them quickly. `index` maps a node id to its position.
+function buildGraphScene(nodes, box) {
+  const count = nodes.length;
+  const scene = {
+    nodes,
+    box,
+    count,
+    index: new Map(),
+    x: new Float64Array(count),
+    y: new Float64Array(count),
+    halfWidth: new Float64Array(count),
+    halfHeight: new Float64Array(count),
+    shape: new Uint8Array(count),
+    type: new Uint8Array(count),
+    // The average node size, for the level of detail.
+    nodeWidth: 48,
+    nodeHeight: 36
+  };
+  let widths = 0;
+  let heights = 0;
+  nodes.forEach((node, index) => {
+    const output = node.type === "output";
+    const width = node.width ?? (output ? 60 : 48);
+    const height = node.height ?? 36;
+    const shape = node.shape ?? (output ? "rect" : "circle");
+    scene.index.set(node.id, index);
+    scene.x[index] = node.x;
+    scene.y[index] = node.y;
+    scene.halfWidth[index] = width / 2;
+    scene.halfHeight[index] = height / 2;
+    scene.shape[index] = shape === "triangle" ? SHAPE_TRIANGLE : shape === "box" || output ? SHAPE_RECT : SHAPE_ELLIPSE;
+    scene.type[index] = Math.max(0, NODE_TYPES.indexOf(node.type));
+    widths += width;
+    heights += height;
+  });
+  if (count) {
+    scene.nodeWidth = widths / count;
+    scene.nodeHeight = heights / count;
+  }
+  return scene;
+}
+
+function traceNode(context, scene, index) {
+  const x = scene.x[index];
+  const y = scene.y[index];
+  const halfWidth = scene.halfWidth[index];
+  const halfHeight = scene.halfHeight[index];
+  switch (scene.shape[index]) {
+    case SHAPE_RECT:
+      context.rect(x - halfWidth, y - halfHeight, 2 * halfWidth, 2 * halfHeight);
+      break;
+    case SHAPE_TRIANGLE:
+      context.moveTo(x, y - halfHeight);
+      context.lineTo(x + halfWidth, y + halfHeight);
+      context.lineTo(x - halfWidth, y + halfHeight);
+      context.closePath();
+      break;
+    default:
+      context.moveTo(x + halfWidth, y);
+      context.ellipse(x, y, halfWidth, halfHeight, 0, 0, 2 * Math.PI);
+      context.closePath();
+  }
+}
+
+// Whether a point is on a node's shape, grown by `margin` all round.
+function pointInNode(scene, index, pointX, pointY, margin) {
+  const dx = pointX - scene.x[index];
+  const dy = pointY - scene.y[index];
+  const halfWidth = scene.halfWidth[index] + margin;
+  const halfHeight = scene.halfHeight[index] + margin;
+  switch (scene.shape[index]) {
+    case SHAPE_RECT:
+      return Math.abs(dx) <= halfWidth && Math.abs(dy) <= halfHeight;
+    case SHAPE_TRIANGLE:
+      return Math.abs(dy) <= halfHeight && Math.abs(dx) <= (halfWidth * (dy + halfHeight)) / (2 * halfHeight);
+    default:
+      return (dx / halfWidth) ** 2 + (dy / halfHeight) ** 2 <= 1;
+  }
+}
+
+// An edge's bounding box, the end its inversion bubble goes on, and - for an
+// edge without stored points (the toy examples, and edges preprocessing
+// rewires) - the curve it is drawn as. Worked out once and kept on the edge,
+// whose endpoints never move.
+const EDGE_GEOMETRY = Symbol("edgeGeometry");
+
+function edgeGeometry(edge, scene) {
+  let geometry = edge[EDGE_GEOMETRY];
+  if (geometry) {
+    return geometry;
+  }
+  let curve = null;
+  let points = edge.points;
+  if (!points?.length) {
+    const from = scene.index.get(edge.from);
+    const to = scene.index.get(edge.to);
+    const fromX = scene.x[from];
+    const fromY = scene.y[from];
+    const toX = scene.x[to];
+    const toY = scene.y[to];
+    const controlX = (fromX + toX) / 2;
+    curve = [fromX + 22, fromY, controlX, fromY, controlX - 20, toY, toX - 28, toY];
+    points = [
+      [curve[0], curve[1]],
+      [curve[2], curve[3]],
+      [curve[4], curve[5]],
+      [curve[6], curve[7]]
+    ];
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  points.forEach(([x, y]) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  });
+  const end = points[points.length - 1];
+  geometry = { curve, minX, minY, maxX, maxY, endX: end[0], endY: end[1] };
+  edge[EDGE_GEOMETRY] = geometry;
+  return geometry;
+}
+
+// Traces the part of an edge inside `area` (graph units, a little larger
+// than the view so the ends cut off stay out of sight). Many edges of the
+// large circuits are thousands of units long, and stroking them in full -
+// mostly off screen - made a zoomed-in frame take a fifth of a second. A
+// dashed edge (`dashPeriod` > 0) is cut a whole number of dash periods from
+// its start, so its dashes stay where they are as the view moves.
+function traceEdge(context, edge, geometry, area, dashPeriod) {
+  const inside = geometry.minX >= area.minX && geometry.maxX <= area.maxX && geometry.minY >= area.minY && geometry.maxY <= area.maxY;
+  const curve = geometry.curve;
+  if (curve) {
+    if (inside || dashPeriod) {
+      context.moveTo(curve[0], curve[1]);
+      context.bezierCurveTo(curve[2], curve[3], curve[4], curve[5], curve[6], curve[7]);
+    } else {
+      traceCurveIn(context, curve, area);
+    }
     return;
   }
-  const view = graphDom.view;
-  [graphDom.highlightedNodeId, state.activeNodeId].forEach((nodeId) => {
-    if (nodeId === null) {
+  const points = edge.points;
+  if (inside) {
+    context.moveTo(points[0][0], points[0][1]);
+    for (let index = 1; index < points.length; index += 1) {
+      context.lineTo(points[index][0], points[index][1]);
+    }
+    return;
+  }
+  tracePolylineIn(context, points, area, dashPeriod);
+}
+
+// The parameter range [t0, t1] of a segment inside `area` (Liang-Barsky),
+// as clippedStart / clippedEnd, or false when none of it is.
+let clippedStart = 0;
+let clippedEnd = 1;
+
+function clipSegment(x0, y0, x1, y1, area) {
+  clippedStart = 0;
+  clippedEnd = 1;
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  return (
+    clipBoundary(-dx, x0 - area.minX) &&
+    clipBoundary(dx, area.maxX - x0) &&
+    clipBoundary(-dy, y0 - area.minY) &&
+    clipBoundary(dy, area.maxY - y0)
+  );
+}
+
+function clipBoundary(p, q) {
+  if (p === 0) {
+    return q >= 0;
+  }
+  const t = q / p;
+  if (p < 0) {
+    if (t > clippedEnd) {
+      return false;
+    }
+    clippedStart = Math.max(clippedStart, t);
+  } else {
+    if (t < clippedStart) {
+      return false;
+    }
+    clippedEnd = Math.min(clippedEnd, t);
+  }
+  return true;
+}
+
+// A polyline from its first point in `area` to its last (dashed: from a
+// whole number of dash periods along it, at or before that first point).
+function tracePolylineIn(context, points, area, dashPeriod) {
+  let start = Infinity;
+  let end = -Infinity;
+  let travelled = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const [x0, y0] = points[index - 1];
+    const [x1, y1] = points[index];
+    const length = Math.hypot(x1 - x0, y1 - y0);
+    if (clipSegment(x0, y0, x1, y1, area)) {
+      start = Math.min(start, travelled + clippedStart * length);
+      end = Math.max(end, travelled + clippedEnd * length);
+    }
+    travelled += length;
+  }
+  if (start > end) {
+    return;
+  }
+  if (dashPeriod) {
+    start = Math.floor(start / dashPeriod) * dashPeriod;
+  }
+  travelled = 0;
+  let drawing = false;
+  for (let index = 1; index < points.length; index += 1) {
+    const [x0, y0] = points[index - 1];
+    const [x1, y1] = points[index];
+    const length = Math.hypot(x1 - x0, y1 - y0);
+    const from = travelled;
+    travelled += length;
+    if (travelled < start) {
+      continue;
+    }
+    if (!drawing) {
+      const t = length ? (start - from) / length : 0;
+      context.moveTo(x0 + t * (x1 - x0), y0 + t * (y1 - y0));
+      drawing = true;
+    }
+    if (travelled >= end) {
+      const t = length ? (end - from) / length : 1;
+      context.lineTo(x0 + t * (x1 - x0), y0 + t * (y1 - y0));
       return;
     }
-    graphDom.nodeElements.get(nodeId)?.classList.toggle("active", nodeId === state.activeNodeId);
-    [...(view.children.get(nodeId) ?? []), ...(view.parents.get(nodeId) ?? [])].forEach((edge) => {
-      const isActive = state.activeNodeId !== null && (edge.from === state.activeNodeId || edge.to === state.activeNodeId);
-      graphDom.edgeElements.get(edge)?.classList.toggle("active", isActive);
-    });
-  });
-  graphDom.highlightedNodeId = state.activeNodeId;
+    context.lineTo(x1, y1);
+  }
 }
 
-function updateGraphHighlight() {
-  // Only while the drawn graph shows the current state; otherwise the next
-  // renderGraph brings the highlight along (syncGraphHighlight).
-  if (graphDom.example === currentExample() && graphDom.view === currentGraphView()) {
-    syncGraphHighlight();
-  }
+// The pieces of a cubic Bezier curve inside `area`: it is halved (de
+// Casteljau) until a piece lies wholly inside or outside, or is tiny.
+const CURVE_SPLIT_DEPTH = 12;
+let curvePenX = NaN;
+let curvePenY = NaN;
 
-  if (specGraphDom && specGraphDom.example === currentExample() && specGraphDom.hoveredNodeId !== state.activeNodeId) {
-    specGraphDom.nodeElements.get(specGraphDom.hoveredNodeId)?.classList.remove("active");
-    specGraphDom.nodeElements.get(state.activeNodeId)?.classList.add("active");
-    specGraphDom.hoveredNodeId = state.activeNodeId;
-  }
+function traceCurveIn(context, curve, area) {
+  curvePenX = NaN;
+  curvePenY = NaN;
+  traceCurvePiece(context, ...curve, area, CURVE_SPLIT_DEPTH);
+}
 
-  if (polyDom.highlightedNodeId !== state.activeNodeId) {
-    polyDom.elements.get(polyDom.highlightedNodeId)?.classList.remove("active-link");
-    const row = polyDom.elements.get(state.activeNodeId);
-    if (row) {
-      row.classList.add("active-link");
-      row.scrollIntoView({ block: "nearest" });
+function traceCurvePiece(context, x0, y0, x1, y1, x2, y2, x3, y3, area, depth) {
+  const minX = Math.min(x0, x1, x2, x3);
+  const maxX = Math.max(x0, x1, x2, x3);
+  const minY = Math.min(y0, y1, y2, y3);
+  const maxY = Math.max(y0, y1, y2, y3);
+  if (maxX < area.minX || minX > area.maxX || maxY < area.minY || minY > area.maxY) {
+    return;
+  }
+  if (!depth || (minX >= area.minX && maxX <= area.maxX && minY >= area.minY && maxY <= area.maxY)) {
+    // Pieces next to each other along the curve make one subpath.
+    if (x0 !== curvePenX || y0 !== curvePenY) {
+      context.moveTo(x0, y0);
     }
-    polyDom.highlightedNodeId = state.activeNodeId;
+    context.bezierCurveTo(x1, y1, x2, y2, x3, y3);
+    curvePenX = x3;
+    curvePenY = y3;
+    return;
   }
+  const ax = (x0 + x1) / 2;
+  const ay = (y0 + y1) / 2;
+  const bx = (x1 + x2) / 2;
+  const by = (y1 + y2) / 2;
+  const cx = (x2 + x3) / 2;
+  const cy = (y2 + y3) / 2;
+  const abx = (ax + bx) / 2;
+  const aby = (ay + by) / 2;
+  const bcx = (bx + cx) / 2;
+  const bcy = (by + cy) / 2;
+  const mx = (abx + bcx) / 2;
+  const my = (aby + bcy) / 2;
+  traceCurvePiece(context, x0, y0, ax, ay, abx, aby, mx, my, area, depth - 1);
+  traceCurvePiece(context, mx, my, bcx, bcy, cx, cy, x3, y3, area, depth - 1);
+}
+
+// The SVG labels had dominant-baseline: middle, which puts the middle of the
+// x-height on the anchor. Canvas text sits on its baseline instead, so labels
+// go down by half the font's x-height (measured once the font is loaded).
+let labelMiddle = 3.35;
+
+function measureLabelFont() {
+  const context = document.createElement("canvas").getContext("2d");
+  context.font = LABEL_FONT;
+  const xHeight = context.measureText("x").actualBoundingBoxAscent;
+  if (xHeight > 0) {
+    labelMiddle = xHeight / 2;
+  }
+}
+
+// One graph card: the graph drawn on a canvas, the hover highlight on a
+// second one above it, both kept in view while the card scrolls.
+class GraphCanvas {
+  // `highlightEdges`: hovering a node highlights its edges too.
+  // `fadeRewrittenEdges`: edges out of NODE_SPEC_REWRITTEN gates fade.
+  constructor(card, { highlightEdges, fadeRewrittenEdges }) {
+    this.card = card;
+    this.surface = card.querySelector(".graph-surface");
+    this.viewport = card.querySelector(".graph-viewport");
+    [this.base, this.overlay] = this.viewport.querySelectorAll("canvas");
+    this.baseContext = this.base.getContext("2d");
+    this.overlayContext = this.overlay.getContext("2d");
+    this.highlightEdges = highlightEdges;
+    this.fadeRewrittenEdges = fadeRewrittenEdges;
+
+    this.scene = null;
+    this.zoom = 1;
+    this.edges = [];
+    this.edgeSources = null;
+    this.flags = new Uint8Array(0);
+    this.labels = false;
+    this.cut = null;
+    this.activeIndex = -1;
+    // The visible part of the card in CSS pixels, and device pixels per CSS
+    // pixel.
+    this.width = 0;
+    this.height = 0;
+    this.pixelRatio = 1;
+
+    this.palette = null;
+    this.styles = [];
+    this.tinyBubbleColor = null;
+    // Nodes in view grouped by style (type and flags), reused every frame.
+    this.buckets = Array.from({ length: NODE_TYPES.length << NODE_FLAG_BITS }, () => []);
+    this.frame = 0;
+    this.baseStale = false;
+    this.overlayStale = false;
+
+    card.addEventListener("scroll", () => this.redraw(), { passive: true });
+    // Drawn right away rather than in the next frame, so a card that has
+    // just been shown or resized never shows an empty frame.
+    new ResizeObserver(() => {
+      this.layout();
+      this.flush();
+    }).observe(card);
+    this.viewport.addEventListener("mousemove", (event) => this.hover(event));
+    this.viewport.addEventListener("mouseleave", () => setActiveNode(null));
+    this.viewport.addEventListener("click", (event) => {
+      const nodeId = this.nodeAt(event.clientX, event.clientY);
+      if (nodeId !== null) {
+        setActiveNode(nodeId);
+      }
+    });
+  }
+
+  // Shows `scene` at `zoom`: a new one from its top left corner, the one
+  // already shown just zoomed (see setZoom).
+  show(scene, zoom) {
+    // The card may have just been unhidden (a tab switch), which its
+    // ResizeObserver only reports later.
+    this.layout();
+    if (scene === this.scene) {
+      this.setZoom(zoom);
+      return;
+    }
+    this.scene = scene;
+    this.styles = [];
+    this.zoom = zoom;
+    this.edges = [];
+    this.edgeSources = null;
+    this.flags = new Uint8Array(scene.count);
+    this.cut = null;
+    this.activeIndex = -1;
+    this.sizeSurface();
+    this.card.scrollLeft = 0;
+    this.card.scrollTop = 0;
+    this.redraw();
+  }
+
+  clear() {
+    this.scene = null;
+    this.edges = [];
+    this.edgeSources = null;
+    this.cut = null;
+    this.activeIndex = -1;
+    this.sizeSurface();
+    this.redraw();
+  }
+
+  // Zooms about the middle of the view, which stays on the same point of
+  // the graph.
+  setZoom(zoom) {
+    if (zoom === this.zoom) {
+      return;
+    }
+    const { card } = this;
+    const anchor = this.scene && this.width && this.height ? this.toGraph(card.scrollLeft + this.width / 2, card.scrollTop + this.height / 2) : null;
+    this.zoom = zoom;
+    this.sizeSurface();
+    if (anchor) {
+      const point = this.toSurface(anchor.x, anchor.y);
+      card.scrollLeft = point.x - this.width / 2;
+      card.scrollTop = point.y - this.height / 2;
+    }
+    this.redraw();
+  }
+
+  setEdges(edges) {
+    if (edges !== this.edges) {
+      this.edges = edges;
+      this.edgeSources = null;
+      this.redraw();
+    }
+  }
+
+  // One NODE_* bit set per scene node.
+  setNodeFlags(flags) {
+    if (flags !== this.flags) {
+      this.flags = flags;
+      this.redraw();
+    }
+  }
+
+  setLabels(shown) {
+    if (shown !== this.labels) {
+      this.labels = shown;
+      this.redraw();
+    }
+  }
+
+  // The specification rewrite's cut line, a Path2D in graph units, or null.
+  setCut(path) {
+    this.cut = path;
+    this.redraw();
+  }
+
+  setActive(nodeId) {
+    const index = nodeId === null || !this.scene ? -1 : this.scene.index.get(nodeId) ?? -1;
+    if (index !== this.activeIndex) {
+      this.activeIndex = index;
+      this.overlayStale = true;
+      this.schedule();
+    }
+  }
+
+  // Scrolls the card to put a node in the middle of the view, unless it is
+  // in view and at least `margin` pixels from its edges already.
+  scrollNodeIntoView(nodeId, margin) {
+    const index = nodeId === null ? undefined : this.scene?.index.get(nodeId);
+    if (index === undefined || !this.width || !this.height) {
+      return;
+    }
+    const { card } = this;
+    const point = this.toSurface(this.scene.x[index], this.scene.y[index]);
+    if (point.x < card.scrollLeft + margin || point.x > card.scrollLeft + this.width - margin) {
+      card.scrollLeft = Math.max(0, point.x - this.width / 2);
+    }
+    if (point.y < card.scrollTop + margin || point.y > card.scrollTop + this.height - margin) {
+      card.scrollTop = Math.max(0, point.y - this.height / 2);
+    }
+  }
+
+  // Fits the canvases to the visible part of the card.
+  layout() {
+    this.width = this.card.clientWidth;
+    this.height = this.card.clientHeight;
+    this.pixelRatio = window.devicePixelRatio || 1;
+    this.sizeSurface();
+    this.viewport.style.width = `${this.width}px`;
+    this.viewport.style.height = `${this.height}px`;
+    const pixelWidth = Math.round(this.width * this.pixelRatio);
+    const pixelHeight = Math.round(this.height * this.pixelRatio);
+    [this.base, this.overlay].forEach((canvas) => {
+      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+        // This also clears it.
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+        this.baseStale = true;
+      }
+    });
+    if (this.baseStale) {
+      this.schedule();
+    }
+  }
+
+  // The scroll range: the zoomed graph and its margin, or the card if that
+  // is bigger.
+  sizeSurface() {
+    const box = this.scene?.box;
+    const width = box ? box.width * this.zoom + 2 * GRAPH_MARGIN : 0;
+    const height = box ? box.height * this.zoom + 2 * GRAPH_MARGIN : 0;
+    this.surface.style.width = `${Math.max(this.width, width)}px`;
+    this.surface.style.height = `${Math.max(this.height, height)}px`;
+  }
+
+  // Where the graph's box starts on the surface, in CSS pixels: inside the
+  // margin, and centred across a card wider than the zoomed graph.
+  origin() {
+    const graphWidth = this.scene.box.width * this.zoom;
+    return { x: GRAPH_MARGIN + Math.max(0, (this.width - 2 * GRAPH_MARGIN - graphWidth) / 2), y: GRAPH_MARGIN };
+  }
+
+  toGraph(surfaceX, surfaceY) {
+    const origin = this.origin();
+    const box = this.scene.box;
+    return { x: box.minX + (surfaceX - origin.x) / this.zoom, y: box.minY + (surfaceY - origin.y) / this.zoom };
+  }
+
+  toSurface(x, y) {
+    const origin = this.origin();
+    const box = this.scene.box;
+    return { x: origin.x + (x - box.minX) * this.zoom, y: origin.y + (y - box.minY) * this.zoom };
+  }
+
+  // Redraws the graph (and the highlight) in the next frame.
+  redraw() {
+    this.baseStale = true;
+    this.schedule();
+  }
+
+  schedule() {
+    if (!this.frame) {
+      this.frame = requestAnimationFrame(() => {
+        this.frame = 0;
+        this.flush();
+      });
+    }
+  }
+
+  // Draws whatever is out of date now.
+  flush() {
+    if (this.frame) {
+      cancelAnimationFrame(this.frame);
+      this.frame = 0;
+    }
+    if (this.baseStale) {
+      this.baseStale = false;
+      this.overlayStale = true;
+      this.drawBase();
+    }
+    if (this.overlayStale) {
+      this.overlayStale = false;
+      this.drawOverlay();
+    }
+  }
+
+  // Makes `context` draw in graph units, as the graph sits in view.
+  applyTransform(context) {
+    const scale = this.pixelRatio * this.zoom;
+    const origin = this.origin();
+    const box = this.scene.box;
+    context.setTransform(
+      scale,
+      0,
+      0,
+      scale,
+      this.pixelRatio * (origin.x - this.card.scrollLeft) - scale * box.minX,
+      this.pixelRatio * (origin.y - this.card.scrollTop) - scale * box.minY
+    );
+  }
+
+  // The part of the graph in view, in graph units, and (drawing) a margin
+  // around it wide enough for whatever is cut off there to stay unseen.
+  visibleArea(drawing = false) {
+    const margin = drawing ? EDGE_CLIP_MARGIN_PX + EDGE_CLIP_MARGIN * this.zoom : 0;
+    const topLeft = this.toGraph(this.card.scrollLeft - margin, this.card.scrollTop - margin);
+    return {
+      minX: topLeft.x,
+      minY: topLeft.y,
+      maxX: topLeft.x + (this.width + 2 * margin) / this.zoom,
+      maxY: topLeft.y + (this.height + 2 * margin) / this.zoom
+    };
+  }
+
+  // Whether nodes are too small on screen to show their shape.
+  nodesAreTiny() {
+    return this.scene.nodeHeight * this.zoom * this.pixelRatio < TINY_NODE_PX;
+  }
+
+  labelsVisible() {
+    return this.labels && LABEL_FONT_SIZE * this.zoom * this.pixelRatio >= MIN_LABEL_PX;
+  }
+
+  nodeStyle(key) {
+    this.palette ??= graphPalette();
+    this.styles[key] ??= nodeStyle(key & 3, key >> 2, this.palette, this.scene.nodeWidth / 2, this.scene.nodeHeight / 2);
+    return this.styles[key];
+  }
+
+  styleKey(index) {
+    return (this.flags[index] << 2) | this.scene.type[index];
+  }
+
+  // Edges first, then the cut, then the nodes - only those in view.
+  drawBase() {
+    const context = this.baseContext;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, this.base.width, this.base.height);
+    if (!this.scene || !this.width || !this.height) {
+      return;
+    }
+    this.palette ??= graphPalette();
+    const area = this.visibleArea(true);
+    this.applyTransform(context);
+    this.drawEdges(context, area);
+    if (this.cut) {
+      this.drawCut(context);
+    }
+    this.drawNodes(context, area);
+  }
+
+  drawEdges(context, area) {
+    const { scene, flags, edges } = this;
+    const reach = BUBBLE_RADIUS + BUBBLE_STROKE_WIDTH;
+    const sources = this.fadeRewrittenEdges ? this.edgeSourceIndexes() : null;
+    // Plain and inverted edges, and both again out of substituted gates.
+    const groups = [[], [], [], []];
+    for (let index = 0; index < edges.length; index += 1) {
+      const edge = edges[index];
+      const geometry = edgeGeometry(edge, scene);
+      if (
+        geometry.maxX + reach < area.minX ||
+        geometry.minX - reach > area.maxX ||
+        geometry.maxY + reach < area.minY ||
+        geometry.minY - reach > area.maxY
+      ) {
+        continue;
+      }
+      const rewritten = sources !== null && (flags[sources[index]] & NODE_SPEC_REWRITTEN) !== 0;
+      groups[(edge.inverted ? 1 : 0) + (rewritten ? 2 : 0)].push(edge);
+    }
+    groups.forEach((group, kind) => {
+      if (group.length) {
+        // Faded edges may fade all the way out.
+        const rewritten = (kind & 2) !== 0;
+        const width = rewritten ? EDGE_WIDTH : Math.max(EDGE_WIDTH, MIN_EDGE_PX / this.zoom);
+        const opacity = rewritten ? EDGE_REWRITTEN_OPACITY : EDGE_OPACITY;
+        this.strokeEdges(context, group, (kind & 1) === 1, opacity, this.palette.edge, width, area);
+      }
+    });
+  }
+
+  // Each edge's source gate, by its position in the scene.
+  edgeSourceIndexes() {
+    this.edgeSources ??= Int32Array.from(this.edges, (edge) => this.scene.index.get(edge.from) ?? 0);
+    return this.edgeSources;
+  }
+
+  // Strokes edges of one look in one go, as far as they are in `area`:
+  // inverted ones dashed, then their bubbles on top.
+  strokeEdges(context, edges, inverted, opacity, color, width, area) {
+    const scale = this.zoom * this.pixelRatio;
+    const dashed = inverted && DASH_PERIOD * scale >= MIN_DASH_PX;
+    context.globalAlpha = opacity;
+    context.strokeStyle = color;
+    context.lineWidth = width;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.setLineDash(dashed ? EDGE_DASH : []);
+    // Strokes thinner than a device pixel are fastest all in one path. Wider
+    // ones, thousands in one path fall off the GPU's fast path (140 ms on
+    // sp-ar-rc-64 at 50% zoom); in batches they take 18.
+    const batch = width * scale > 1 ? EDGE_BATCH : edges.length;
+    for (let start = 0; start < edges.length; start += batch) {
+      context.beginPath();
+      const end = Math.min(edges.length, start + batch);
+      for (let index = start; index < end; index += 1) {
+        traceEdge(context, edges[index], edgeGeometry(edges[index], this.scene), area, dashed ? DASH_PERIOD : 0);
+      }
+      context.stroke();
+    }
+    context.setLineDash([]);
+    if (!inverted) {
+      return;
+    }
+    const tiny = BUBBLE_RADIUS * scale < TINY_BUBBLE_PX;
+    // A square with the area of the whole bubble, outline included.
+    const half = (Math.sqrt(Math.PI) * (BUBBLE_RADIUS + BUBBLE_STROKE_WIDTH / 2)) / 2;
+    context.beginPath();
+    edges.forEach((edge) => {
+      const { endX, endY } = edgeGeometry(edge, this.scene);
+      if (endX < area.minX || endX > area.maxX || endY < area.minY || endY > area.maxY) {
+        return;
+      }
+      if (tiny) {
+        context.rect(endX - half, endY - half, 2 * half, 2 * half);
+      } else {
+        context.moveTo(endX + BUBBLE_RADIUS, endY);
+        context.arc(endX, endY, BUBBLE_RADIUS, 0, 2 * Math.PI);
+      }
+    });
+    if (tiny) {
+      this.tinyBubbleColor ??= mergedBubbleColor(this.palette);
+      context.fillStyle = this.tinyBubbleColor;
+      context.fill();
+      return;
+    }
+    context.fillStyle = this.palette.bubble;
+    context.fill();
+    context.lineWidth = BUBBLE_STROKE_WIDTH;
+    context.strokeStyle = this.palette.ink;
+    context.stroke();
+  }
+
+  drawCut(context) {
+    context.globalAlpha = 1;
+    context.strokeStyle = this.palette.cut;
+    context.lineWidth = CUT_WIDTH / this.zoom;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.setLineDash(CUT_DASH.map((length) => length / this.zoom));
+    context.stroke(this.cut);
+    context.setLineDash([]);
+  }
+
+  drawNodes(context, area) {
+    const { scene, buckets } = this;
+    const { x, y, halfWidth, halfHeight } = scene;
+    const reach = NODE_MARKED_STROKE_WIDTH;
+    const keys = [];
+    for (let index = 0; index < scene.count; index += 1) {
+      if (
+        x[index] + halfWidth[index] + reach < area.minX ||
+        x[index] - halfWidth[index] - reach > area.maxX ||
+        y[index] + halfHeight[index] + reach < area.minY ||
+        y[index] - halfHeight[index] - reach > area.maxY
+      ) {
+        continue;
+      }
+      const key = this.styleKey(index);
+      if (!buckets[key].length) {
+        keys.push(key);
+      }
+      buckets[key].push(index);
+    }
+    const tiny = this.nodesAreTiny();
+    keys.forEach((key) => this.paintNodes(context, buckets[key], this.nodeStyle(key), tiny));
+    if (this.labelsVisible()) {
+      keys.forEach((key) => this.paintLabels(context, buckets[key], this.nodeStyle(key)));
+    }
+    keys.forEach((key) => {
+      buckets[key].length = 0;
+    });
+  }
+
+  // Fills and outlines nodes of one style in one go.
+  paintNodes(context, indexes, style, tiny) {
+    const { scene } = this;
+    context.globalAlpha = style.opacity;
+    context.beginPath();
+    if (tiny) {
+      indexes.forEach((index) => {
+        const scale = TINY_NODE_SCALE[scene.shape[index]];
+        const halfWidth = scene.halfWidth[index] * scale;
+        const halfHeight = scene.halfHeight[index] * scale;
+        context.rect(scene.x[index] - halfWidth, scene.y[index] - halfHeight, 2 * halfWidth, 2 * halfHeight);
+      });
+      context.fillStyle = style.dot;
+      context.fill();
+      return;
+    }
+    context.fillStyle = style.fill;
+    context.lineWidth = style.strokeWidth;
+    context.lineJoin = "miter";
+    context.miterLimit = 4;
+    context.strokeStyle = style.stroke;
+    // In batches, like wide edges (strokeEdges): 5k ellipses in one path
+    // took 156 ms, in batches 10.
+    for (let start = 0; start < indexes.length; start += NODE_BATCH) {
+      context.beginPath();
+      const end = Math.min(indexes.length, start + NODE_BATCH);
+      for (let position = start; position < end; position += 1) {
+        traceNode(context, scene, indexes[position]);
+      }
+      context.fill();
+      context.stroke();
+    }
+  }
+
+  paintLabels(context, indexes, style) {
+    const { scene } = this;
+    context.globalAlpha = style.opacity;
+    context.fillStyle = style.text;
+    context.font = LABEL_FONT;
+    context.textAlign = "center";
+    context.textBaseline = "alphabetic";
+    indexes.forEach((index) => {
+      // As in the SVG: 1 unit below the centre, 6 in a triangle.
+      const offset = scene.shape[index] === SHAPE_TRIANGLE ? 6 : 1;
+      context.fillText(scene.nodes[index].label, scene.x[index], scene.y[index] + offset + labelMiddle);
+    });
+  }
+
+  // The hovered node, outlined in the highlight colour with a glow, and on
+  // the preprocessing graph its edges with the nodes at their other ends.
+  drawOverlay() {
+    const context = this.overlayContext;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, this.overlay.width, this.overlay.height);
+    const active = this.activeIndex;
+    if (!this.scene || active < 0 || !this.width || !this.height) {
+      return;
+    }
+    this.palette ??= graphPalette();
+    this.applyTransform(context);
+    const { scene, zoom, palette } = this;
+    const tiny = this.nodesAreTiny();
+    const labels = this.labelsVisible();
+
+    if (this.highlightEdges) {
+      const id = scene.nodes[active].id;
+      const plain = [];
+      const inverted = [];
+      const neighbours = new Set();
+      this.edges.forEach((edge) => {
+        if (edge.from !== id && edge.to !== id) {
+          return;
+        }
+        (edge.inverted ? inverted : plain).push(edge);
+        const other = scene.index.get(edge.from === id ? edge.to : edge.from);
+        if (other !== undefined && other !== active) {
+          neighbours.add(other);
+        }
+      });
+      const width = Math.max(EDGE_ACTIVE_WIDTH, MIN_ACTIVE_EDGE_PX / zoom);
+      const area = this.visibleArea(true);
+      if (plain.length) {
+        this.strokeEdges(context, plain, false, 1, palette.highlight, width, area);
+      }
+      if (inverted.length) {
+        this.strokeEdges(context, inverted, true, 1, palette.highlight, width, area);
+      }
+      // Nodes go on top of edges, as in the graph below.
+      neighbours.forEach((index) => {
+        const style = this.nodeStyle(this.styleKey(index));
+        this.paintNodes(context, [index], style, tiny);
+        if (labels) {
+          this.paintLabels(context, [index], style);
+        }
+      });
+    }
+
+    const style = this.nodeStyle(this.styleKey(active));
+    if (tiny) {
+      context.globalAlpha = 1;
+      context.beginPath();
+      context.arc(scene.x[active], scene.y[active], Math.max(scene.halfHeight[active], MIN_ACTIVE_NODE_PX / zoom), 0, 2 * Math.PI);
+      context.fillStyle = palette.highlight;
+      context.fill();
+      return;
+    }
+    context.globalAlpha = style.opacity;
+    context.beginPath();
+    traceNode(context, scene, active);
+    context.shadowColor = palette.glow;
+    context.shadowBlur = NODE_GLOW_BLUR * zoom * this.pixelRatio;
+    context.fillStyle = style.fill;
+    context.fill();
+    context.shadowColor = "transparent";
+    context.shadowBlur = 0;
+    context.lineWidth = NODE_MARKED_STROKE_WIDTH;
+    context.lineJoin = "miter";
+    context.miterLimit = 4;
+    // A node in the cut keeps its teal outline while hovered.
+    context.strokeStyle = this.flags[active] & NODE_SPEC_IN_CUT ? palette.teal : palette.highlight;
+    context.stroke();
+    if (labels) {
+      this.paintLabels(context, [active], style);
+    }
+  }
+
+  hover(event) {
+    if (isPanning()) {
+      this.viewport.style.cursor = "";
+      return;
+    }
+    const nodeId = this.nodeAt(event.clientX, event.clientY);
+    this.viewport.style.cursor = nodeId === null ? "" : "pointer";
+    if (nodeId !== null) {
+      setActiveNode(nodeId);
+    }
+  }
+
+  // The id of the node at a point on screen, or null: the topmost node whose
+  // shape (outline included) is there or, for nodes too small on screen to
+  // point at, the nearest one within HOVER_SLOP_PX.
+  nodeAt(clientX, clientY) {
+    const { scene, zoom } = this;
+    if (!scene || !this.width) {
+      return null;
+    }
+    const bounds = this.viewport.getBoundingClientRect();
+    const point = this.toGraph(clientX - bounds.left + this.card.scrollLeft, clientY - bounds.top + this.card.scrollTop);
+    const margin = NODE_STROKE_WIDTH / 2;
+    const slop = scene.nodeHeight * zoom < SMALL_NODE_PX ? HOVER_SLOP_PX / zoom : 0;
+    let best = -1;
+    let bestDistance = Infinity;
+    for (let index = 0; index < scene.count; index += 1) {
+      const dx = Math.abs(point.x - scene.x[index]) - scene.halfWidth[index] - margin;
+      const dy = Math.abs(point.y - scene.y[index]) - scene.halfHeight[index] - margin;
+      if (dx > slop || dy > slop) {
+        continue;
+      }
+      let distance = 0;
+      if (!pointInNode(scene, index, point.x, point.y, margin)) {
+        if (!slop) {
+          continue;
+        }
+        distance = Math.max(Number.EPSILON, Math.hypot(Math.max(0, dx), Math.max(0, dy)));
+        if (distance > slop) {
+          continue;
+        }
+      }
+      // Later nodes are drawn on top, so they win ties.
+      if (distance <= bestDistance) {
+        best = index;
+        bestDistance = distance;
+      }
+    }
+    return best < 0 ? null : scene.nodes[best].id;
+  }
+}
+
+const preprocessingCanvas = new GraphCanvas(graphCard, { highlightEdges: true, fadeRewrittenEdges: false });
+const specCanvas = new GraphCanvas(specGraphCard, { highlightEdges: false, fadeRewrittenEdges: true });
+
+// Canvas text doesn't wait for web fonts: draw the labels again once the
+// label font is in.
+document.fonts?.load(LABEL_FONT).then(
+  () => {
+    measureLabelFont();
+    preprocessingCanvas.redraw();
+    specCanvas.redraw();
+  },
+  () => {}
+);
+
+// Moving the window to a screen with another pixel density changes no CSS
+// size, so the card's ResizeObserver doesn't notice.
+function watchPixelRatio() {
+  matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener(
+    "change",
+    () => {
+      preprocessingCanvas.layout();
+      specCanvas.layout();
+      watchPixelRatio();
+    },
+    { once: true }
+  );
+}
+watchPixelRatio();
+
+const preprocessingScenes = new WeakMap();
+
+// The preprocessing graph shows every node of the circuit, eliminated ones
+// faded.
+function preprocessingScene(example) {
+  if (!preprocessingScenes.has(example)) {
+    preprocessingScenes.set(example, buildGraphScene(example.nodes, graphViewBox(example.nodes, example.edges)));
+  }
+  return preprocessingScenes.get(example);
+}
+
+const preprocessingFlagsCache = new WeakMap();
+
+function preprocessingFlags(scene, overlay) {
+  let flags = preprocessingFlagsCache.get(overlay);
+  if (!flags) {
+    flags = new Uint8Array(scene.count);
+    const mark = (id, flag) => {
+      const index = scene.index.get(id);
+      if (index !== undefined) {
+        flags[index] |= flag;
+      }
+    };
+    overlay.dimmedSet.forEach((id) => mark(id, NODE_DIMMED));
+    overlay.rootUpdatesMap.forEach((_, id) => mark(id, NODE_ROOT_UPDATED));
+    preprocessingFlagsCache.set(overlay, flags);
+  }
+  return flags;
+}
+
+// Draws the preprocessing graph for the current state.
+function renderGraph() {
+  const view = currentGraphView();
+  const scene = preprocessingScene(currentExample());
+  preprocessingCanvas.show(scene, state.zoom);
+  preprocessingCanvas.setEdges(view.edges);
+  preprocessingCanvas.setNodeFlags(preprocessingFlags(scene, currentOverlay()));
+  preprocessingCanvas.setLabels(labelsShown(view.nodes.length));
+  preprocessingCanvas.setActive(state.activeNodeId);
+  updatePannable(graphCard);
+}
+
+// Moves the hover highlight - on both graphs and in the list - to
+// state.activeNodeId.
+function updateGraphHighlight() {
+  preprocessingCanvas.setActive(state.activeNodeId);
+  specCanvas.setActive(state.activeNodeId);
+  highlightPolynomialRow(state.activeNodeId);
 }
 
 // ---------------------------------------------------------------------------
@@ -1799,175 +3022,104 @@ function specCutPath(cut, isSubstituted) {
   return path;
 }
 
-// The circuit as preprocessing left it (eliminated gates hidden), drawn once
-// per example and zoom; stepping only restyles the nodes that change and
-// redraws the cut.
-let specGraphDom = null;
+// The circuit as preprocessing left it: the gates it did not eliminate and
+// the edges between them, plus what the cut line needs. Fixed per circuit.
+const specScenes = new WeakMap();
 
-function buildSpecGraph(model) {
+function specScene() {
   const example = currentExample();
-  const overlay = finalOverlay();
-  const nodes = example.nodes.filter((node) => !overlay.dimmedSet.has(node.id));
-  const ids = new Set(nodes.map((node) => node.id));
-  const edges = (overlay.rootUpdates.length ? overlay.edges : example.edges).filter(
-    (edge) => ids.has(edge.from) && ids.has(edge.to)
-  );
-  const map = new Map(nodes.map((node) => [node.id, node]));
-  const box = graphViewBox(nodes, edges);
-  sizeGraphElement(specGraphElement, box);
-
-  const showLabels = labelsShown(nodes.length);
-  const noneDimmed = new Set();
-  const noneRewritten = new Map();
-  specGraphElement.innerHTML = `
-    ${inversionMarkerDefs("specInversionBubble")}
-    <g class="edge-layer">${edgeLayerMarkup(edges, map, "specInversionBubble")}</g>
-    <path class="spec-cut" d=""></path>
-    <g class="node-layer">${nodes.map((node) => nodeMarkup(node, noneDimmed, noneRewritten, showLabels)).join("")}</g>
-  `;
-
-  const nodeElements = new Map();
-  specGraphElement.querySelectorAll("[data-node-id]").forEach((element) => {
-    nodeElements.set(element.dataset.nodeId, element);
-  });
-  const edgeElements = [...specGraphElement.querySelectorAll("[data-edge-index]")];
-  const edgeIndexesByFrom = new Map();
-  edges.forEach((edge, index) => {
-    if (!edgeIndexesByFrom.has(edge.from)) {
-      edgeIndexesByFrom.set(edge.from, []);
-    }
-    edgeIndexesByFrom.get(edge.from).push(index);
-  });
-
-  specGraphDom = {
-    example,
-    model,
-    zoom: state.zoom,
-    showLabels,
-    nodeCount: nodes.length,
-    box,
-    map,
-    nodeElements,
-    edgeElements,
-    edgeIndexesByFrom,
-    cutPath: specGraphElement.querySelector(".spec-cut"),
-    cut: prepareSpecCut(nodes),
-    shownStep: 0,
-    currentGate: null,
-    cutVariables: new Set(),
-    hoveredNodeId: state.activeNodeId
-  };
-  updatePannable(specGraphCard);
+  if (!specScenes.has(example)) {
+    const overlay = finalOverlay();
+    const nodes = example.nodes.filter((node) => !overlay.dimmedSet.has(node.id));
+    const ids = new Set(nodes.map((node) => node.id));
+    const edges = (overlay.rootUpdates.length ? overlay.edges : example.edges).filter(
+      (edge) => ids.has(edge.from) && ids.has(edge.to)
+    );
+    const scene = buildGraphScene(nodes, graphViewBox(nodes, edges));
+    scene.edges = edges;
+    scene.cut = prepareSpecCut(nodes);
+    specScenes.set(example, scene);
+  }
+  return specScenes.get(example);
 }
 
-function updateSpecGraph(model, step, terms) {
-  const dom = specGraphDom;
+// Draws the specification graph after `step` substitutions: the gates
+// substituted so far (and the edges out of them) faded, the last one
+// highlighted, the polynomial's variables outlined, and the cut.
+function renderSpecGraph(model, step, terms) {
+  const scene = specScene();
   const steps = model.spec.steps;
+  specCanvas.show(scene, state.zoom);
+  specCanvas.setEdges(scene.edges);
 
-  // Substituted gates (and the edges into their children) fade.
-  const low = Math.min(dom.shownStep, step);
-  const high = Math.max(dom.shownStep, step);
-  for (let index = low; index < high; index += 1) {
-    const gate = steps[index].gate;
-    const substituted = index < step;
-    dom.nodeElements.get(gate)?.classList.toggle("spec-rewritten", substituted);
-    (dom.edgeIndexesByFrom.get(gate) ?? []).forEach((edgeIndex) => {
-      dom.edgeElements[edgeIndex].classList.toggle("spec-rewritten", substituted);
-    });
+  const flags = new Uint8Array(scene.count);
+  const mark = (id, flag) => {
+    const index = scene.index.get(id);
+    if (index !== undefined) {
+      flags[index] |= flag;
+    }
+  };
+  for (let index = 0; index < step; index += 1) {
+    mark(steps[index].gate, NODE_SPEC_REWRITTEN);
   }
-
   const currentGate = step > 0 ? steps[step - 1].gate : null;
-  if (dom.currentGate !== currentGate) {
-    dom.nodeElements.get(dom.currentGate)?.classList.remove("spec-current");
-    dom.nodeElements.get(currentGate)?.classList.add("spec-current");
-    dom.currentGate = currentGate;
+  if (currentGate !== null) {
+    mark(currentGate, NODE_SPEC_CURRENT);
   }
-
   // The variables the polynomial is currently written in.
-  const cutVariables = specCutVariables(terms);
-  dom.cutVariables.forEach((id) => {
-    if (!cutVariables.has(id)) {
-      dom.nodeElements.get(id)?.classList.remove("spec-in-cut");
-    }
-  });
-  cutVariables.forEach((id) => {
-    if (!dom.cutVariables.has(id)) {
-      dom.nodeElements.get(id)?.classList.add("spec-in-cut");
-    }
-  });
-  dom.cutVariables = cutVariables;
-  dom.shownStep = step;
-
-  dom.cutPath.setAttribute("d", specCutPath(dom.cut, (id) => (model.stepOfGate.get(id) ?? Infinity) <= step));
-  scrollSpecGraphTo(dom.map.get(currentGate));
-}
-
-// Keep the gate just substituted on screen when stepping through a graph
-// larger than its card.
-function scrollSpecGraphTo(node) {
-  if (!node) {
-    return;
-  }
-  const margin = 60;
-  const x = (node.x - specGraphDom.box.minX) * state.zoom;
-  const y = (node.y - specGraphDom.box.minY) * state.zoom;
-  if (x < specGraphCard.scrollLeft + margin || x > specGraphCard.scrollLeft + specGraphCard.clientWidth - margin) {
-    specGraphCard.scrollLeft = Math.max(0, x - specGraphCard.clientWidth / 2);
-  }
-  if (y < specGraphCard.scrollTop + margin || y > specGraphCard.scrollTop + specGraphCard.clientHeight - margin) {
-    specGraphCard.scrollTop = Math.max(0, y - specGraphCard.clientHeight / 2);
-  }
+  specCutVariables(terms).forEach((id) => mark(id, NODE_SPEC_IN_CUT));
+  specCanvas.setNodeFlags(flags);
+  specCanvas.setCut(new Path2D(specCutPath(scene.cut, (id) => (model.stepOfGate.get(id) ?? Infinity) <= step)));
+  specCanvas.setLabels(labelsShown(scene.count));
+  specCanvas.setActive(state.activeNodeId);
+  // Keep the gate just substituted on screen when stepping through a graph
+  // larger than its card.
+  specCanvas.scrollNodeIntoView(currentGate, 60);
+  updatePannable(specGraphCard);
 }
 
 // The left panel on the Specification rewrite tab: the preprocessed
 // polynomials in the order they are substituted. Rows already used fade,
 // the one just used is marked, and clicking a row jumps to its step.
-let specRowsDom = { rows: [], shownStep: 0, currentRow: null };
+const specEntriesCache = new WeakMap();
+
+function specRewriteEntries(model) {
+  const example = currentExample();
+  if (!specEntriesCache.has(example)) {
+    const map = nodeMap();
+    const entry = (key, label, expression, nodeId, step) => ({ key, textKey: `${label}::${expression}`, label, expression, nodeId, step });
+    const entries = model.spec.steps.map((step, index) =>
+      entry(`step:${index + 1}`, map.get(step.gate)?.label ?? step.gate, formatPolynomialExpression(step.polynomial), step.gate, index + 1)
+    );
+    // Gates that survive preprocessing but are never substituted, e.g. the one
+    // the fault in sp-ar-rc-4_faulty disconnects from every output.
+    const overlay = finalOverlay();
+    example.nodes.forEach((node) => {
+      if (node.type !== "input" && !overlay.dimmedSet.has(node.id) && !model.stepOfGate.has(node.id)) {
+        const expression = formatPolynomialExpression(overlay.rootUpdatesMap.get(node.id) ?? node.polynomial);
+        entries.push(entry(`node:${node.id}`, node.label, expression, node.id, undefined));
+      }
+    });
+    specEntriesCache.set(example, entries);
+  }
+  return specEntriesCache.get(example);
+}
 
 function renderSpecPolynomialList() {
   const model = specModel();
-  if (!model) {
-    renderPolynomialEntries("Rewrite order", []);
-    specRowsDom = { rows: [], shownStep: 0, currentRow: null };
-    return;
+  if (showPolynomialEntries("Rewrite order", model ? specRewriteEntries(model) : [], "specification")) {
+    // A list shown afresh scrolls to the row used last
+    // (updateSpecPolynomialRows), as on any change of step.
+    polyView.specStep = -1;
   }
-  const map = nodeMap();
-  const entries = model.spec.steps.map((step, index) => ({
-    label: map.get(step.gate)?.label ?? step.gate,
-    expression: formatPolynomialExpression(step.polynomial),
-    nodeId: step.gate,
-    step: index + 1
-  }));
-  // Gates that survive preprocessing but are never substituted, e.g. the one
-  // the fault in sp-ar-rc-4_faulty disconnects from every output.
-  const overlay = finalOverlay();
-  currentExample().nodes.forEach((node) => {
-    if (node.type !== "input" && !overlay.dimmedSet.has(node.id) && !model.stepOfGate.has(node.id)) {
-      entries.push({
-        label: node.label,
-        expression: formatPolynomialExpression(overlay.rootUpdatesMap.get(node.id) ?? node.polynomial),
-        nodeId: node.id
-      });
-    }
-  });
-  renderPolynomialEntries("Rewrite order", entries);
-  specRowsDom = { rows: [...polynomialList.querySelectorAll("[data-spec-step]")], shownStep: 0, currentRow: null };
 }
 
 function updateSpecPolynomialRows(step) {
-  const dom = specRowsDom;
-  const low = Math.min(dom.shownStep, step);
-  const high = Math.max(dom.shownStep, step);
-  for (let index = low; index < high; index += 1) {
-    dom.rows[index]?.classList.toggle("spec-used", index < step);
-  }
-  dom.shownStep = step;
-  const currentRow = step > 0 ? dom.rows[step - 1] ?? null : null;
-  if (dom.currentRow !== currentRow) {
-    dom.currentRow?.classList.remove("spec-current");
-    currentRow?.classList.add("spec-current");
-    currentRow?.scrollIntoView({ block: "nearest" });
-    dom.currentRow = currentRow;
+  const changed = polyView.specStep !== step;
+  polyView.specStep = step;
+  polyView.rows.forEach(({ element, entry }) => decoratePolynomialRow(element, entry));
+  if (changed && step > 0) {
+    revealPolynomialRow(step - 1);
   }
 }
 
@@ -2008,8 +3160,7 @@ function renderSpecView() {
     specPolynomial.textContent = "No specification rewrite data for this example.";
     specTermCount.textContent = "";
     specStepCaption.textContent = "";
-    specGraphElement.innerHTML = "";
-    specGraphDom = null;
+    specCanvas.clear();
     specStepLabel.textContent = "0 / 0";
     [specStepBack, specStepForward, specStepBackMany, specStepForwardMany, specStepRunAll, specStepReset].forEach((button) => {
       button.disabled = true;
@@ -2036,16 +3187,7 @@ function renderSpecView() {
   specStepForwardMany.title = `Substitute the next 10% of the gates (${jump} ${jump === 1 ? "step" : "steps"})`;
   specStepBackMany.title = `Undo the last 10% of the substitutions (${jump} ${jump === 1 ? "step" : "steps"})`;
 
-  // Like the preprocessing graph: a zoom only resizes the drawing, unless
-  // labels come or go with it.
-  if (!specGraphDom || specGraphDom.example !== currentExample() || specGraphDom.showLabels !== labelsShown(specGraphDom.nodeCount)) {
-    buildSpecGraph(model);
-  } else if (specGraphDom.zoom !== state.zoom) {
-    sizeGraphElement(specGraphElement, specGraphDom.box);
-    specGraphDom.zoom = state.zoom;
-    updatePannable(specGraphCard);
-  }
-  updateSpecGraph(model, step, terms);
+  renderSpecGraph(model, step, terms);
   updateSpecPolynomialRows(step);
 }
 
@@ -2208,16 +3350,6 @@ specStepForwardMany.addEventListener("click", () =>
 );
 specStepBackMany.addEventListener("click", () => setSpecStep(Math.max(0, state.specStepIndex - specJumpSize(specStepTotal()))));
 specStepReset.addEventListener("click", () => setSpecStep(0));
-
-// Hovering a node of the specification graph highlights its row, as on the
-// preprocessing graph.
-specGraphElement.addEventListener("mouseover", (event) => {
-  const element = graphNodeOf(event.target);
-  if (element && !isPanning()) {
-    setActiveNode(element.dataset.nodeId);
-  }
-});
-specGraphElement.addEventListener("mouseleave", () => setActiveNode(null));
 
 document.addEventListener("keydown", (event) => {
   if (state.phase === "specification") {

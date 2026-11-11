@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=05af9a2683" />
+    <link rel="stylesheet" href="./styles.css?v=db1ecd419a" />
   </head>
   <body>
     <div class="page-shell">
@@ -39,7 +39,7 @@
             </div>
             <span class="chip" id="polynomialCount"></span>
           </div>
-          <div id="polynomialList" class="poly-list compact" aria-live="polite"></div>
+          <div id="polynomialList" class="poly-list compact"></div>
         </section>
 
         <section class="panel panel-right">
@@ -72,12 +72,15 @@
                     <button id="zoomReset" class="ghost-button toolbar-button" type="button">Reset</button>
                   </div>
                 </div>
-                <div class="graph-card">
-                  <svg id="graph" viewBox="0 0 760 430" role="img" aria-labelledby="graphTitle graphDesc">
-                    <title id="graphTitle">And-Inverter Graph</title>
-                    <desc id="graphDesc">Interactive graph with hoverable nodes and polynomial annotations.</desc>
-                  </svg>
+                <div class="graph-card" id="graphCard">
+                  <div class="graph-surface">
+                    <div class="graph-viewport" role="img" aria-label="And-Inverter Graph" aria-describedby="graphDesc">
+                      <canvas class="graph-layer"></canvas>
+                      <canvas class="graph-layer"></canvas>
+                    </div>
+                  </div>
                 </div>
+                <p id="graphDesc" hidden>Interactive graph with hoverable nodes and polynomial annotations.</p>
               </div>
 
               <aside id="nodeInspector" class="node-inspector inspector-card" aria-live="polite">
@@ -146,12 +149,15 @@
                 <span class="spec-legend-item"><span class="spec-legend-swatch current" aria-hidden="true"></span>just substituted</span>
                 <span class="spec-legend-item"><span class="spec-legend-swatch rewritten" aria-hidden="true"></span>already substituted</span>
               </p>
-              <div class="graph-card">
-                <svg id="specGraph" role="img" aria-labelledby="specGraphTitle specGraphDesc">
-                  <title id="specGraphTitle">Rewriting cut</title>
-                  <desc id="specGraphDesc">The circuit after preprocessing. A dashed line separates the gates already substituted into the specification polynomial from those not yet substituted.</desc>
-                </svg>
+              <div class="graph-card" id="specGraphCard">
+                <div class="graph-surface">
+                  <div class="graph-viewport" role="img" aria-label="Rewriting cut" aria-describedby="specGraphDesc">
+                    <canvas class="graph-layer"></canvas>
+                    <canvas class="graph-layer"></canvas>
+                  </div>
+                </div>
               </div>
+              <p id="specGraphDesc" hidden>The circuit after preprocessing. A dashed line separates the gates already substituted into the specification polynomial from those not yet substituted.</p>
             </div>
           </div>
         </section>
@@ -159,6 +165,6 @@
 
     </div>
 
-    <script src="./main.js?v=32acfc80ad"></script>
+    <script src="./main.js?v=35e2af60e9"></script>
   </body>
 </html>
